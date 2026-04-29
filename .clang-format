@@ -1,0 +1,99 @@
+# Style file for clang-format ( http://clang.llvm.org/docs/ClangFormatStyleOptions.html )
+# Current style version: 2025-12-13
+
+# Changelog:
+#   2025-12-13 - column limit 120, penalty 10
+#   2025-12-12 - AlignOperands, AllowAllArgumentsOnNextLine, AllowAllParametersOfDeclarationOnNextLine
+#                AllowShortFunctionsOnASingleLine -> inline only
+#   2025-12-10 - initial version
+
+# rough grounding, most is custom
+BasedOnStyle: Google
+#Language: Cpp
+Standard: Latest
+
+
+# columns guideline
+ColumnLimit: 120
+PenaltyExcessCharacter: 10
+PenaltyBreakString: 50
+
+
+# Indentation and Braces
+IndentWidth: 4
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortCaseLabelsOnASingleLine: true
+AllowAllArgumentsOnNextLine: false # if args on next line, all multiline
+AllowAllParametersOfDeclarationOnNextLine: false
+AlwaysBreakBeforeMultilineStrings: false
+BreakTemplateDeclarations: true
+BreakBeforeBinaryOperators: true
+BreakBeforeTernaryOperators: true
+BreakBeforeConceptDeclarations: true
+BreakConstructorInitializersBeforeComma: false
+BreakBeforeBraces: Allman
+BinPackParameters: false
+PackConstructorInitializers: NextLine
+Cpp11BracedListStyle: true
+IndentCaseLabels: false
+RequiresClausePosition: OwnLine
+BraceWrapping:
+    AfterCaseLabel: true
+    BeforeLambdaBody: true
+
+
+# Alignment
+AlignOperands: AlignAfterOperator
+
+
+# Spaces
+DerivePointerAlignment: false
+PointerAlignment: Left
+MaxEmptyLinesToKeep: 2
+SpaceAfterControlStatementKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+UseTab: Never
+ConstructorInitializerIndentWidth: 2
+AccessModifierOffset: -4
+
+
+# Comments
+FixNamespaceComments: true
+AlignTrailingComments: true
+
+
+# Includes are grouped by "distance": local file, project headers,
+# external library headers, then the standard library. This ordering
+# improves include hygiene: headers pulled in close to the current file
+# are least likely to hide missing dependencies in other headers, while
+# project-wide and external includes follow in widening rings. When a
+# header forgets to include something it depends on, this grouping makes
+# the failure appear earlier and prevents accidental masking.
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:  '^"'
+    Priority: 1
+  - Regex: '^<.*\.(h|hh|hpp|hxx)>'  # <foo/bar/file.h>, <x.hh>, ...
+    Priority: 2
+  - Regex: '^<'                     # stdlib
+    Priority: 3
+
+
+# We use east const (`T const`) via `QualifierAlignment: Right`.
+# In modern C++, any name used as a type must behave like a real type alias.
+# The only known semantic changes triggered by this option arise from
+# macro-typedefs such as `#define P int*`, where `const P a` and `P const a`
+# do not denote the same type. This discrepancy does not exist with `using P = int*`
+# and is therefore treated as a bug in the original code, not in the formatter.
+# If a rewrite changes meaning, it reveals a preprocessor-based type that should
+# be replaced with a proper alias or renamed to make its intent explicit.
+QualifierAlignment: Right

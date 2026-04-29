@@ -1,0 +1,140 @@
+{
+    "version": 7,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 28
+    },
+    "configurePresets": [
+        {
+            "name": "x64-windows-base",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "toolset": {
+                "value": "host=x64",
+                "strategy": "external"
+            },
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "hidden": true
+        },
+        {
+            "name": "x64-windows-msvc-ninja-base",
+            "inherits": "x64-windows-base",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_LINKER_TYPE": "MSVC"
+            },
+            "generator": "Ninja",
+            "hidden": true
+        },
+        {
+            "name": "x64-windows-msvc-ninja-debug",
+            "displayName": "Debug MSVC (Ninja)",
+            "description": "Debug build with full symbols",
+            "inherits": "x64-windows-msvc-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "x64-windows-msvc-ninja-release",
+            "displayName": "Release MSVC (Ninja)",
+            "description": "Optimized release build",
+            "inherits": "x64-windows-msvc-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "x64-windows-msvc-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo MSVC (Ninja)",
+            "description": "Optimized build with debug symbols",
+            "inherits": "x64-windows-msvc-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "x64-linux-base",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            },
+            "hidden": true
+        },
+        {
+            "name": "x64-linux-clang-ninja-base",
+            "inherits": "x64-linux-base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            },
+            "hidden": true
+        },
+        {
+            "name": "x64-linux-clang-ninja-debug",
+            "displayName": "Debug Clang (Ninja, Linux)",
+            "description": "Debug build with full symbols",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "x64-linux-clang-ninja-release",
+            "displayName": "Release Clang (Ninja, Linux)",
+            "description": "Optimized release build",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "x64-linux-clang-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo Clang (Ninja, Linux)",
+            "description": "Optimized build with debug symbols",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug-msvc",
+            "configurePreset": "x64-windows-msvc-ninja-debug"
+        },
+        {
+            "name": "release-msvc",
+            "configurePreset": "x64-windows-msvc-ninja-release"
+        },
+        {
+            "name": "relwithdebinfo-msvc",
+            "configurePreset": "x64-windows-msvc-ninja-relwithdebinfo"
+        },
+        {
+            "name": "debug-linux-clang",
+            "configurePreset": "x64-linux-clang-ninja-debug"
+        },
+        {
+            "name": "release-linux-clang",
+            "configurePreset": "x64-linux-clang-ninja-release"
+        },
+        {
+            "name": "relwithdebinfo-linux-clang",
+            "configurePreset": "x64-linux-clang-ninja-relwithdebinfo"
+        }
+    ]
+}

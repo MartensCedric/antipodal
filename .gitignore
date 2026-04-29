@@ -1,0 +1,29 @@
+# Build / CMake
+build/
+build-*/
+out/
+cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+.cache/
+*.user
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent-specific configs
+.agent/
+agents/
+.claude/
+.cursor/
+.aider*
+.roo/
+.continue/

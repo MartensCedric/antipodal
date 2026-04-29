@@ -1,0 +1,8 @@
+{
+  "name": "antipodal",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "tbb",
+    "embree"
+  ]
+}

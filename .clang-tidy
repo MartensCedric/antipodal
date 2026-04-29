@@ -1,0 +1,139 @@
+---
+# Clang-Tidy configuration
+#
+# IMPORTANT: The Checks field uses YAML folded block scalar syntax (>-)
+# - The ">-" indicator folds multiple lines into a single line with spaces
+# - All entries must have consistent indentation (2 spaces)
+# - Each check pattern is comma-separated
+# - Use "-checkname" to disable specific checks from wildcard groups
+# - DO NOT use quoted strings ("") as this can cause parsing issues with indentation
+
+Checks: >-
+  bugprone-*,
+  -bugprone-chained-comparison,
+  -bugprone-macro-parentheses,
+  -bugprone-sizeof-container,
+  -bugprone-sizeof-expression,
+  readability-*,
+  -readability-identifier-length,
+  -readability-braces-around-statements,
+  -readability-function-cognitive-complexity,
+  -readability-redundant-access-specifiers,
+  -readability-uppercase-literal-suffix,
+  -readability-implicit-bool-conversion,
+  -readability-else-after-return,
+  -readability-convert-member-functions-to-static,
+  -readability-named-parameter,
+  -readability-magic-numbers,
+  -readability-avoid-nested-conditional-operator,
+  -readability-simplify-boolean-expr,
+  -readability-qualified-auto,
+  -readability-math-missing-parentheses,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  misc-*,
+  -misc-use-anonymous-namespace,
+  -misc-non-private-member-variables-in-classes,
+  -misc-no-recursion,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-avoid-const-or-ref-data-members,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-avoid-non-const-global-variables,
+  -cppcoreguidelines-missing-std-forward,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-rvalue-reference-param-not-moved,
+  performance-*,
+  -performance-enum-size
+
+# Disabled checks rationale:
+# -bugprone-chained-comparison: Triggers on Catch2 CHECK macro, re-enable after updating
+# -bugprone-macro-parentheses: Incompatible with CHECK/REQUIRE macros using spaceship operator
+# -bugprone-sizeof-expression: Used intentionally for completeness checks (e.g., sizeof comparison)
+# -readability-redundant-access-specifiers: We use these intentionally for grouping
+# -misc-non-private-member-variables-in-classes: clang-tidy 21 confuses structs and classes; we want public members in structs
+# -cppcoreguidelines-avoid-magic-numbers: Too strict, flags obvious constants
+# -cppcoreguidelines-avoid-const-or-ref-data-members: We use reference members where appropriate
+# -cppcoreguidelines-avoid-c-arrays: Allow for legacy code and simple local arrays
+# -cppcoreguidelines-macro-usage: Allow TEST() and other testing framework macros
+# -cppcoreguidelines-missing-std-forward: We use cc::forward, which is not recognized by clang-tidy
+# -cppcoreguidelines-rvalue-reference-param-not-moved: We use cc::move, which is not recognized by clang-tidy
+
+# Don't treat warnings as errors - allow incremental improvement
+# Exception: Critical warnings that must be errors
+WarningsAsErrors: "
+  bugprone-no-return-in-nonvoid-functions,
+  bugprone-return-const-ref-from-parameter
+  "
+
+#
+# Check Options: Configure specific check behaviors
+#
+CheckOptions:
+  #
+  # Naming Conventions
+  #
+  # Classes: CamelCase
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+
+  # Structs: lower_case
+  - key: readability-identifier-naming.StructCase
+    value: lower_case
+  - key: readability-identifier-naming.StructIgnoredRegexp
+    value: "^$"
+
+  # Enums: lower_case
+  - key: readability-identifier-naming.EnumCase
+    value: lower_case
+  - key: readability-identifier-naming.EnumConstantCase
+    value: lower_case
+
+  # Functions: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+
+  # Variables: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+
+  # Member Variables: Leading underscore for private/protected members
+  - key: readability-identifier-naming.PrivateMemberPrefix
+    value: '_'
+  - key: readability-identifier-naming.ProtectedMemberPrefix
+    value: '_'
+
+  # Constants: lower_case
+  - key: readability-identifier-naming.ConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: lower_case
+  - key: readability-identifier-naming.StaticConstantCase
+    value: lower_case
+
+  # Macros: UPPER_CASE
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+
+  # Namespaces: lower_case
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+
+  #
+  # Core Guidelines Options
+  #
+  # Ignore macros in do-while check (e.g., for test macros)
+  - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value: true
+
+  #
+  # Performance Options
+  #
+  # Check for unnecessary moves of trivially copyable types
+  - key: performance-move-const-arg.CheckTriviallyCopyableMove
+    value: true

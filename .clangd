@@ -1,0 +1,43 @@
+# Clangd configuration
+# This file enables clang-tidy integration and configures diagnostics
+
+#
+# Index: Configure background indexing for code navigation
+#
+Index:
+  # Build index in background for better code navigation
+  Background: Build
+
+#
+# Completion: Configure code completion behavior
+#
+Completion:
+  # Never insert headers automatically - let developers control includes
+  HeaderInsertion: Never
+
+#
+# Diagnostics: Configure warnings and clang-tidy integration
+#
+Diagnostics:
+  # Enable clang-tidy checks
+  # The .clang-tidy file in the repository root defines which checks to run
+  ClangTidy:
+    # FastCheckFilter controls performance vs completeness tradeoff
+    # - Strict: Only fast checks (default, but may skip some checks)
+    # - Loose: Most checks
+    # - None: All checks (slower but more thorough)
+    FastCheckFilter: None
+
+  # Show all compiler warnings
+  UnusedIncludes: Strict
+
+  # Suppress warnings from external headers (Qt, DirectX, etc.)
+  # Suppress:
+  #   - 'extern/*'
+
+#
+# CompileFlags: Configure how source files are compiled
+#
+CompileFlags:
+  # Compiler flags configuration for MSVC compatibility with clangd
+  Compiler: clang-cl
