@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.hh"
-#include "dispatcher.hh"
+#include "dispatcher/dispatcher.hh"
 
 namespace antipodal
 {

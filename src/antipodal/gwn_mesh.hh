@@ -1,8 +1,8 @@
 #pragma once
 
 #include "common.hh"
-#include "dispatcher.hh"
-#include "intersector.hh"
+#include "dispatcher/dispatcher.hh"
+#include "intersector/intersector.hh"
 
 #include <cassert>
 #include <span>

@@ -3,7 +3,8 @@
 #include <vector>
 
 #include <antipodal/common.hh>
-#include <antipodal/intersector.hh>
+#include <antipodal/intersector/intersector.hh>
+#include <antipodal/intersector/intersector_embree.hh>
 
 namespace
 {

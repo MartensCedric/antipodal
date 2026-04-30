@@ -6,10 +6,10 @@
 #include <vector>
 
 #include <antipodal/common.hh>
-#include <antipodal/dispatcher.hh>
-#include <antipodal/dispatcher_tbb.hh>
+#include <antipodal/dispatcher/dispatcher.hh>
+#include <antipodal/dispatcher/dispatcher_tbb.hh>
 #include <antipodal/gwn_mesh.hh>
-#include <antipodal/intersector.hh>
+#include <antipodal/intersector/intersector.hh>
 
 namespace
 {
