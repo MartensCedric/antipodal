@@ -41,6 +41,8 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
         test/test_common.cc
         test/test_intersector.cc
         test/test_gwn_mesh.cc
+        test/fwd_diff_diff/test_fdd_basics.cc
+        test/fwd_diff_diff/test_fdd_math.cc
     )
     target_link_libraries(antipodal-tests PRIVATE antipodal)
     target_include_directories(antipodal-tests PRIVATE test)
