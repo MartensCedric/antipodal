@@ -14,6 +14,23 @@
 namespace antipodal
 {
 template <class T>
+struct vec2
+{
+    T x{};
+    T y{};
+
+    [[nodiscard]] friend constexpr vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
+    [[nodiscard]] friend constexpr vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+    [[nodiscard]] friend constexpr vec2 operator-(vec2 a) { return {-a.x, -a.y}; }
+    [[nodiscard]] friend constexpr vec2 operator*(vec2 a, T s) { return {a.x * s, a.y * s}; }
+    [[nodiscard]] friend constexpr vec2 operator*(T s, vec2 a) { return a * s; }
+    [[nodiscard]] friend constexpr vec2 operator/(vec2 a, T s) { return {a.x / s, a.y / s}; }
+};
+
+using fvec2 = vec2<float>;
+using dvec2 = vec2<double>;
+
+template <class T>
 struct vec3
 {
     T x{};
