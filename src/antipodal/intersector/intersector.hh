@@ -46,7 +46,7 @@
 #include <cstddef>
 #include <span>
 
-#include "../common.hh"
+#include <antipodal/math/common.hh>
 
 namespace antipodal
 {

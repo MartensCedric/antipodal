@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include <antipodal/common.hh>
+#include <antipodal/math/common.hh>
 #include <antipodal/intersector/intersector.hh>
 #include <antipodal/intersector/intersector_embree.hh>
 

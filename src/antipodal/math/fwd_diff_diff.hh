@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.hh"
+#include <antipodal/math/common.hh>
 
 #include <cmath>
 #include <format>

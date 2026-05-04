@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <vector>
 
-#include <antipodal/common.hh>
+#include <antipodal/math/common.hh>
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/dispatcher/dispatcher_tbb.hh>
 #include <antipodal/gwn_mesh.hh>

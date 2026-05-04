@@ -3,8 +3,8 @@
 #include <cmath>
 #include <limits>
 
-#include <antipodal/common.hh>
-#include <antipodal/fwd_diff_diff.hh>
+#include <antipodal/math/common.hh>
+#include <antipodal/math/fwd_diff_diff.hh>
 
 // ============================================================================
 // input / constant construction semantics

@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-#include <antipodal/fwd_diff_diff.hh>
+#include <antipodal/math/fwd_diff_diff.hh>
 
 using antipodal_test::fd_first;
 using antipodal_test::fd_second;

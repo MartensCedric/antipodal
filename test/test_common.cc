@@ -3,7 +3,7 @@
 #include <cmath>
 #include <type_traits>
 
-#include <antipodal/common.hh>
+#include <antipodal/math/common.hh>
 
 namespace
 {

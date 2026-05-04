@@ -1,8 +1,8 @@
 #pragma once
 
-#include "common.hh"
-#include "dispatcher/dispatcher.hh"
-#include "intersector/intersector.hh"
+#include <antipodal/dispatcher/dispatcher.hh>
+#include <antipodal/intersector/intersector.hh>
+#include <antipodal/math/common.hh>
 
 #include <cassert>
 #include <span>

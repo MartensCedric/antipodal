@@ -16,7 +16,7 @@
  * filter callback that rejects every hit so traversal visits all of them.
  */
 
-#include "../common.hh"
+#include <antipodal/math/common.hh>
 
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
 #include <cassert>
