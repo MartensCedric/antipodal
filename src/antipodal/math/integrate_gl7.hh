@@ -173,4 +173,18 @@ auto integrate_gl7(F&& fun,
         }
     }
 }
+
+/// Callable wrapper around `integrate_gl7` matching the duck-typed
+/// `Integrator` concept used by the parametric GWN kernels:
+/// `op()(F&& fun, T a, T b, integrate_config const&) -> T`, with `fun(T t)`.
+/// The hierarchical index is hidden — pass `integrate_gl7` directly when
+/// callers need it for caching.
+struct IntegratorGL7
+{
+    template <class F, class T>
+    [[nodiscard]] T operator()(F&& fun, T a, T b, integrate_config const& cfg) const
+    {
+        return integrate_gl7([&](int /*idx*/, T t) { return fun(t); }, a, b, cfg);
+    }
+};
 } // namespace antipodal

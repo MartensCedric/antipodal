@@ -103,6 +103,19 @@ cmake --build --preset release-msvc
 
 ## Build
 
+The convenience wrapper `build.py` configures with the default preset
+(`x64-windows-msvc-ninja-relwithdebinfo` / `x64-linux-clang-ninja-relwithdebinfo`),
+threads the vcpkg toolchain through, and on Windows sources `vcvarsall.bat`
+automatically:
+
+```sh
+python build.py        # configure + build
+python build.py -t     # configure + build + run antipodal-tests
+python build.py -p <preset>   # pick a different preset
+```
+
+Or invoke CMake directly:
+
 ```sh
 cmake -S . -B build
 cmake --build build
