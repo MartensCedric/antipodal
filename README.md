@@ -65,9 +65,53 @@ backend; ships with:
 backend; ships with `NaiveIntersector<T>` (always) and `EmbreeIntersector`
 (float-only, gated on `ANTIPODAL_HAS_EMBREE`).
 
-Parametric-surface counterparts (`eval_gwnr_parametric_*`) are stubbed in
-[`gwn_parametric.hh`](src/antipodal/gwn_parametric.hh) and will land in
-subsequent commits.
+### Parametric surfaces
+
+```cpp
+// Fractional GWN for a parametric surface (boundary integral over open curves)
+T    eval_gwnr_parametric_single_fractional(vec3<T> p, vec3<T> x0,
+                                            ForEachBoundary const&,
+                                            integrate_config const& = {},
+                                            Integrator const& = IntegratorGK15{});
+void eval_gwnr_parametric_batch_fractional (Dispatcher&,
+                                            span<vec3<T> const> positions,
+                                            span<T> out_wnrs,
+                                            vec3<T> x0,
+                                            ForEachBoundary const&,
+                                            integrate_config const& = {},
+                                            Integrator const& = IntegratorGK15{});
+
+// Integer GWN (signed ray-surface crossing count)
+int  eval_gwnr_parametric_single_integer(vec3<T> p, vec3<T> x0, Intersector const&);
+void eval_gwnr_parametric_batch_integer (Dispatcher&, Intersector const&,
+                                         span<vec3<T> const> positions,
+                                         span<int> out_counts,
+                                         vec3<T> x0);
+
+// Full GWN (fractional + integer, fused per-point)
+T    eval_gwnr_parametric_single(vec3<T> p, vec3<T> x0,
+                                 ForEachBoundary const&, Intersector const&,
+                                 integrate_config const& = {},
+                                 Integrator const& = IntegratorGK15{});
+void eval_gwnr_parametric_batch (Dispatcher&, Intersector const&,
+                                 span<vec3<T> const> positions,
+                                 span<T> out_wnrs,
+                                 vec3<T> x0,
+                                 ForEachBoundary const&,
+                                 integrate_config const& = {},
+                                 Integrator const& = IntegratorGK15{});
+```
+
+A **Curve** is any callable `curve(fwd_diff<T>) -> vec3<fwd_diff<T>>` on the
+parameter domain `t ∈ [0, 1]`; first derivatives flow through the autodiff type
+so the integrand stays smooth. **ForEachBoundary** is any callable that fires a
+visitor once per boundary curve — visitor-style rather than `span` so curves of
+heterogeneous types can coexist. **Integrator** is any callable matching
+`integrator(F&&, T a, T b, integrate_config const&) -> T`; ships with
+`IntegratorGK15` (default, adaptive Gauss–Kronrod 15-point) and `IntegratorGL7`
+(fixed Gauss–Legendre 7-point), both in `<antipodal/math/integrate_*.hh>`. The
+**Intersector** concept is identical to the mesh case. See
+[`gwn_parametric.hh`](src/antipodal/gwn_parametric.hh) for full Doxygen.
 
 ## Dependencies
 
@@ -145,3 +189,11 @@ Then in code:
 antipodal::TbbDispatcher disp;
 antipodal::eval_gwnr_mesh_batch_fractional(disp, positions, out_wnrs, dir, boundary);
 ```
+
+## TODO
+
+The following are in active cleanup and will land in subsequent commits:
+
+- **Example autodiff-friendly parametric curves** — Bézier patches and trimmed NURBS, ready to drop into the `Curve` / `ForEachBoundary` slots.
+- **Exact integer predicates for mesh GWN** — unconditionally robust ray–triangle intersection for the integer term and consistent fractional term
+- **Example parametric intersector** — a reference `Intersector` implementation for parametric patches

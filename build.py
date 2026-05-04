@@ -5,6 +5,7 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -81,6 +82,23 @@ def msvc_env(arch: str = "x64") -> dict[str, str]:
     return env
 
 
+def link_compile_commands(build_dir: Path) -> None:
+    """Expose the active preset's compile_commands.json at build/compile_commands.json
+    so .clangd's CompilationDatabase: build entry resolves regardless of preset.
+    Prefers a symlink; falls back to a copy when symlinks aren't permitted
+    (Windows without Developer Mode / admin)."""
+    src = build_dir / "compile_commands.json"
+    if not src.is_file():
+        return
+    dst = ROOT / "build" / "compile_commands.json"
+    if dst.is_symlink() or dst.exists():
+        dst.unlink()
+    try:
+        os.symlink(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
 def build(preset: str, vcpkg_toolchain: Path | None) -> Path:
     build_dir = ROOT / "build" / preset
 
@@ -96,6 +114,7 @@ def build(preset: str, vcpkg_toolchain: Path | None) -> Path:
         env = msvc_env("x64")
 
     subprocess.run(configure, cwd=ROOT, check=True, env=env)
+    link_compile_commands(build_dir)
     subprocess.run(["cmake", "--build", str(build_dir)], cwd=ROOT, check=True, env=env)
     return build_dir
 

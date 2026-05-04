@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <numbers>
 #include <span>
 #include <unordered_map>
@@ -131,7 +130,7 @@ template <class T>
     {
         int lo;
         int hi;
-        [[nodiscard]] friend bool operator==(edge_key, edge_key) = default;
+        [[nodiscard]] bool operator==(edge_key const&) const = default;
     };
     struct edge_hash
     {

@@ -39,5 +39,8 @@ Diagnostics:
 # CompileFlags: Configure how source files are compiled
 #
 CompileFlags:
+  # build.py links the active preset's compile_commands.json into build/
+  # after configure, so clangd finds it here regardless of which preset is active.
+  CompilationDatabase: build
   # Compiler flags configuration for MSVC compatibility with clangd
   Compiler: clang-cl
