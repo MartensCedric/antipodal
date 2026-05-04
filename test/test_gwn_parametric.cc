@@ -10,7 +10,7 @@
 #include <antipodal/gwn_parametric.hh>
 #include <antipodal/intersector/intersector.hh>
 #include <antipodal/math/common.hh>
-#include <antipodal/math/fwd_diff_diff.hh>
+#include <antipodal/math/fwd_diff.hh>
 #include <antipodal/math/integrate_gl7.hh>
 
 namespace
@@ -91,7 +91,7 @@ antipodal::vec3<T> unit_x0()
 }
 
 // Straight-line segment p0 -> p1 as a parametric curve over t in [0, 1].
-// Callable with fwd_diff_diff<T> so the GWN kernel can autodiff through it.
+// Callable with fwd_diff<T> so the GWN kernel can autodiff through it.
 template <class T>
 struct LineCurve
 {

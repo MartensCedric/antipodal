@@ -17,7 +17,7 @@
  *   - the vector field            `X = x0 − (x0·Γ) Γ`
  *   - the geodesic tangent        `v = Γ − (x1·Γ) x1`,  with `x1 = −x0`
  *
- * First derivatives `Γ'` flow through `fwd_diff_diff` autodiff, then
+ * First derivatives `Γ'` flow through `fwd_diff` autodiff, then
  * everything collapses to plain `vec3<T>` math.
  *
  * ## Duck-typed concepts
@@ -25,7 +25,7 @@
  * ### Curve
  * Any callable
  *
- *     curve(fwd_diff_diff<T>) -> vec3<fwd_diff_diff<T>>;
+ *     curve(fwd_diff<T>) -> vec3<fwd_diff<T>>;
  *
  * with parameter domain `t ∈ [0, 1]`. Curves must be oriented so the surface
  * lies on the left, matching the convention used by `build_boundary_segments`
@@ -59,7 +59,7 @@
 
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/math/common.hh>
-#include <antipodal/math/fwd_diff_diff.hh>
+#include <antipodal/math/fwd_diff.hh>
 #include <antipodal/math/integrate.hh>
 #include <antipodal/math/integrate_gk15.hh>
 
@@ -75,14 +75,14 @@ template <class T, class Curve>
 {
     auto const x1 = -x0;
 
-    // Curve point + autodiff first/second derivatives, projected onto S^2.
-    auto const phi = curve(fwd_diff_diff<T>::input(t));
+    // Curve point + autodiff first derivative, projected onto S^2.
+    auto const phi = curve(fwd_diff<T>::input(t));
     auto const r = phi - p;
-    auto const G_fdd = normalize_fdd(r);
+    auto const G_fd = normalize_fd(r);
 
     // Drop to plain T for the geometry: only G and G' are needed downstream.
-    vec3<T> const G = value_of(G_fdd);
-    vec3<T> const Gp = d_value_of(G_fdd);
+    vec3<T> const G = value_of(G_fd);
+    vec3<T> const Gp = d_value_of(G_fd);
 
     // Vector field X = x0 - (x0·G) G, with derivative
     //     X' = -(x0·G') G - (x0·G) G'.

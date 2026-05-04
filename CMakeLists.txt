@@ -44,6 +44,8 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
         test/test_gwn_parametric.cc
         test/fwd_diff_diff/test_fdd_basics.cc
         test/fwd_diff_diff/test_fdd_math.cc
+        test/fwd_diff/test_fd_basics.cc
+        test/fwd_diff/test_fd_math.cc
         test/math/test_integrate_gk15.cc
         test/math/test_integrate_gl7.cc
     )
