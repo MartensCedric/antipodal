@@ -1,0 +1,27 @@
+# Rotated unit cube with the top (+z) face removed -> open boundary.
+# Demonstrates the fractional (boundary integral) GWN term: the slice shows a
+# smooth transition across the opening instead of a crisp inside/outside edge.
+v -0.653669 -0.378727 -0.423418
+v 0.219959 -0.111633 -0.830154
+v 0.169679 0.769328 -0.359644
+v -0.703949 0.502233 0.047093
+v -0.169679 -0.769328 0.359644
+v 0.703949 -0.502233 -0.047093
+v 0.653669 0.378727 0.423418
+v -0.219959 0.111633 0.830154
+# bottom (-z)
+f 1 4 3
+f 1 3 2
+# front (-y)
+f 1 2 6
+f 1 6 5
+# back (+y)
+f 4 8 7
+f 4 7 3
+# left (-x)
+f 1 5 8
+f 1 8 4
+# right (+x)
+f 2 3 7
+f 2 7 6
+# top (+z) intentionally omitted

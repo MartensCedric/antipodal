@@ -1,6 +1,8 @@
 # The Antipodal Method
 
-A header-only C++20 library for computing **3D generalized winding numbers** (GWN) on triangle meshes and parametric surfaces, accompanying the paper *"The Antipodal Method: Fast, Accurate, and Robust 3D Generalized Winding Numbers"*.
+![Teaser](teaser.png)
+
+A header-only C++20 library for computing **3D generalized winding numbers** (GWN) on triangle meshes and parametric surfaces, accompanying the paper [*"The Antipodal Method: Fast, Accurate, and Robust 3D Generalized Winding Numbers"*](https://cedricmartens.com/publications/antipodal_wn).
 
 The GWN is a continuous, robust measure of how "inside" a point is with respect to a 3D surface, including surfaces that are open, self-intersecting, or non-manifold. 
 It is the workhorse of many geometry-processing pipelines (insidedness queries, fast voxelization, repair, reconstruction, ...).
@@ -188,6 +190,41 @@ Then in code:
 
 antipodal::TbbDispatcher disp;
 antipodal::eval_gwnr_mesh_batch_fractional(disp, positions, out_wnrs, dir, boundary);
+```
+
+## Example
+
+[`examples/main.cc`](examples/main.cc) is a small standalone program that loads an `.obj`,
+evaluates the mesh GWN on a 2D slice plane, and writes the slice to a PNG (diverging colormap,
+blue ≈ outside, yellow ≈ inside). It builds as the `antipodal-example-slice` target.
+
+```sh
+# input.obj output.png resolution [slice_pos] [nx ny nz] [extent]
+antipodal-example-slice examples/rotated_cube_open.obj slice.png 256
+```
+
+The shipped demo mesh [`examples/rotated_cube_open.obj`](examples/rotated_cube_open.obj) is a rotated
+cube with one face removed, so the slice shows the smooth fractional-term transition along the open
+boundary instead of a crisp inside/outside edge.
+
+## Citation
+
+If you use this library, please cite the paper
+([publication page](https://cedricmartens.com/publications/antipodal_wn),
+[doi:10.1145/3811323](https://doi.org/10.1145/3811323)):
+
+```bibtex
+@article{Martens2026AntipodalWN,
+  title = {The Antipodal Method: Fast, Accurate, and Robust 3D Generalized Winding Numbers},
+  author = {Martens, Cedric and Trettner, Philip and Bessmeltsev, Mikhail},
+  journal = {ACM Transactions on Graphics},
+  volume = {45},
+  number = {4},
+  articleno = {43},
+  year = {2026},
+  month = jul,
+  doi = {10.1145/3811323},
+}
 ```
 
 ## TODO

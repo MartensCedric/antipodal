@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(ANTIPODAL_WITH_TBB    "Enable TBB-based parallel dispatcher"           ON)
 option(ANTIPODAL_WITH_EMBREE "Enable Embree (used by future ray-based paths)" ON)
 option(ANTIPODAL_BUILD_TESTS "Build the antipodal test suite"                 ON)
+option(ANTIPODAL_BUILD_EXAMPLES "Build the antipodal example programs"        ON)
 
 # Header-only: consumers get includes + propagated deps via the INTERFACE target
 add_library(antipodal INTERFACE)
@@ -59,4 +60,13 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
     endif()
 
     add_test(NAME antipodal-tests COMMAND antipodal-tests)
+endif()
+
+# Examples only build when antipodal is the top-level project
+if(ANTIPODAL_BUILD_EXAMPLES AND PROJECT_IS_TOP_LEVEL)
+    find_package(Stb REQUIRED) # vcpkg 'stb' port -> Stb_INCLUDE_DIR (stb_image_write.h)
+
+    add_executable(antipodal-example-slice examples/main.cc)
+    target_link_libraries(antipodal-example-slice PRIVATE antipodal)
+    target_include_directories(antipodal-example-slice PRIVATE ${Stb_INCLUDE_DIR})
 endif()
