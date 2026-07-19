@@ -124,3 +124,22 @@ words:
   - watertight
   - wnrs
   - xmmintrin
+  # robust GWN (exact integer predicates)
+  - robust
+  - Robust
+  - ivec3
+  - itriangle
+  - dtriangle
+  - iquant
+  - qsegment
+  - lround
+  - primID
+  - geometryUserPtr
+  - RTCBoundsFunctionArguments
+  - RTCOccludedFunctionNArguments
+  - rtcSetSceneBuildQuality
+  - rtcSetSceneFlags
+  - rtcSetGeometryUserPrimitiveCount
+  - rtcSetGeometryUserData
+  - rtcSetGeometryBoundsFunction
+  - rtcSetGeometryOccludedFunction

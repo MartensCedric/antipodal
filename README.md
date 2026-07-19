@@ -48,6 +48,21 @@ void eval_gwnr_mesh_batch (Dispatcher&, Intersector const&,
                            vec3<T> x0,
                            span<weighted_segment3<T> const> boundary);
 
+// Robust full GWN — exact integer predicates keep the integer and fractional terms in agreement.
+// No spurious ±1 near the surface.
+// Prepared object, built once from the mesh.
+// Bakes a fixed axis-aligned ray; takes no x0.
+// Requires Embree. See gwn_mesh_robust.hh.
+struct RobustMeshGwn<T> {                            // owns quantized geometry + BVH
+    RobustMeshGwn(span<vec3<T> const> vertices, span<int const> indices,
+                  span<weighted_segment3<T> const> boundary);
+    T   eval(vec3<T> p) const;                       // full robust GWN
+    T   fractional(vec3<T> p) const;                 // boundary term only
+    int signed_intersection_count(vec3<T> p) const;  // integer term (no dir: ray is baked in)
+};
+void eval_gwnr_mesh_batch_robust(Dispatcher&, RobustMeshGwn<T> const&,
+                                 span<vec3<T> const> positions, span<T> out_wnrs);
+
 // Helpers (common.hh): build the open-boundary edge list from a triangle mesh
 vector<weighted_segment3<T>> build_boundary_segments(span<vec3<T> const> vertices,
                                                     span<int const> indices);
@@ -232,5 +247,4 @@ If you use this library, please cite the paper
 The following are in active cleanup and will land in subsequent commits:
 
 - **Example autodiff-friendly parametric curves** — Bézier patches and trimmed NURBS, ready to drop into the `Curve` / `ForEachBoundary` slots.
-- **Exact integer predicates for mesh GWN** — unconditionally robust ray–triangle intersection for the integer term and consistent fractional term
 - **Example parametric intersector** — a reference `Intersector` implementation for parametric patches

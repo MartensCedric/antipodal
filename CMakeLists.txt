@@ -42,6 +42,7 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
         test/test_common.cc
         test/test_intersector.cc
         test/test_gwn_mesh.cc
+        test/test_gwn_mesh_robust.cc
         test/test_gwn_parametric.cc
         test/fwd_diff_diff/test_fdd_basics.cc
         test/fwd_diff_diff/test_fdd_math.cc
