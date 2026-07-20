@@ -242,6 +242,10 @@ If you use this library, please cite the paper
 }
 ```
 
+## License
+
+This library is released under the [MIT License](LICENSE) — free to use, modify, and distribute, including in commercial and closed-source projects. See the [`LICENSE`](LICENSE) file for the full text.
+
 ## TODO
 
 The following are in active cleanup and will land in subsequent commits:
