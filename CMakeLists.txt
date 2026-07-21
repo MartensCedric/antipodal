@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Optional dependencies — code paths gate on the ANTIPODAL_HAS_* defines below
 option(ANTIPODAL_WITH_TBB    "Enable TBB-based parallel dispatcher"           ON)
 option(ANTIPODAL_WITH_EMBREE "Enable Embree (used by future ray-based paths)" ON)
+option(ANTIPODAL_WITH_OPENGL "Enable the raw-OpenGL compute-shader evaluator" ON)
 option(ANTIPODAL_BUILD_TESTS "Build the antipodal test suite"                 ON)
 option(ANTIPODAL_BUILD_EXAMPLES "Build the antipodal example programs"        ON)
 
@@ -33,6 +34,15 @@ if(ANTIPODAL_WITH_EMBREE)
     target_compile_definitions(antipodal INTERFACE ANTIPODAL_HAS_EMBREE=1)
 endif()
 
+# The OpenGL evaluator is header-only and loads GL entry points through a
+# caller-supplied loader, so the INTERFACE target links nothing extra here.
+# The optional headless-context helper (gl_headless_context.hh) needs platform
+# libs (Windows: opengl32/gdi32/user32; Linux: GL + EGL); consumers that use it
+# link those themselves, as the test target does below.
+if(ANTIPODAL_WITH_OPENGL)
+    target_compile_definitions(antipodal INTERFACE ANTIPODAL_HAS_OPENGL=1)
+endif()
+
 # Tests only build when antipodal is the top-level project (skipped when consumed via add_subdirectory)
 if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
     enable_testing()
@@ -43,6 +53,7 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
         test/test_intersector.cc
         test/test_gwn_mesh.cc
         test/test_gwn_mesh_robust.cc
+        test/test_gwn_mesh_opengl.cc
         test/test_gwn_parametric.cc
         test/fwd_diff_diff/test_fdd_basics.cc
         test/fwd_diff_diff/test_fdd_math.cc
@@ -53,6 +64,18 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
     )
     target_link_libraries(antipodal-tests PRIVATE antipodal)
     target_include_directories(antipodal-tests PRIVATE test)
+
+    # The OpenGL test spins up a headless context via gl_headless_context.hh,
+    # which needs platform GL/EGL libraries linked into the test executable.
+    if(ANTIPODAL_WITH_OPENGL)
+        if(WIN32)
+            target_link_libraries(antipodal-tests PRIVATE opengl32 gdi32 user32)
+        elseif(UNIX)
+            find_package(OpenGL REQUIRED)
+            find_library(ANTIPODAL_EGL_LIB EGL REQUIRED)
+            target_link_libraries(antipodal-tests PRIVATE OpenGL::GL ${ANTIPODAL_EGL_LIB})
+        endif()
+    endif()
 
     if(MSVC)
         target_compile_options(antipodal-tests PRIVATE /W4)

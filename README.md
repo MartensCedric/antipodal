@@ -130,12 +130,39 @@ heterogeneous types can coexist. **Integrator** is any callable matching
 **Intersector** concept is identical to the mesh case. See
 [`gwn_parametric.hh`](src/antipodal/gwn_parametric.hh) for full Doxygen.
 
+## GPU evaluation (OpenGL)
+
+For dense volumetric queries there is a compute-shader evaluator, [`gwn_mesh_opengl.hh`](src/antipodal/gwn_mesh_opengl.hh).
+It computes the full GWN over an entire 3D grid in four passes: clear → rasterize the integer crossings → prefix-sum → add the fractional boundary integral.
+The axis with the fewest cells is chosen as the ray/integration axis — the full GWN is invariant to that choice — which minimizes the prefix-sum work.
+A 2D slice (one axis of size 1) skips the prefix-sum pass entirely.
+
+It is **header-only raw OpenGL** — no glad/glew/glfw.
+It requires a current OpenGL 4.3 context and a loader (`void* (*)(char const*)`, e.g. `wglGetProcAddress`, `eglGetProcAddress`, `glfwGetProcAddress`, `SDL_GL_GetProcAddress`).
+The library itself links nothing.
+
+```cpp
+#include <antipodal/gwn_mesh_opengl.hh>
+
+antipodal::OpenGLMeshGwn gwn(my_get_proc_address);        // current GL 4.3 context required
+gwn.set_scene(vertices, indices, antipodal::build_boundary_segments<float>(vertices, indices));
+
+std::vector<float> out(nx * ny * nz);                     // layout ((z*ny)+y)*nx + x
+gwn.eval_grid(start, dx, dy, dz, nx, ny, nz, out);        // p(i,j,k) = start + i*dx + j*dy + k*dz
+```
+
+If you don't already have a context, [`gl_headless_context.hh`](src/antipodal/opengl/gl_headless_context.hh) creates an off-screen one.
+On Windows it is a hidden-window WGL context (works out of the box); on Linux, an EGL surfaceless context.
+Linux needs the EGL dev package installed (e.g. `libegl1-mesa-dev` on Debian/Ubuntu, `mesa-libEGL-devel` on Fedora); nothing is bundled.
+Consumers of the headless helper link the platform GL libraries themselves (Windows: `opengl32 gdi32 user32`; Linux: `GL` and `EGL`).
+
 ## Dependencies
 
-Both optional, **default ON**, both *user-provided* (the project does not bundle them):
+TBB and Embree are optional, **default ON**, both *user-provided* (the project does not bundle them):
 
 - **TBB** — provides `antipodal::TbbDispatcher`. Disable with `-DANTIPODAL_WITH_TBB=OFF`.
 - **Embree 4** — provides `antipodal::EmbreeIntersector` (ray-based integer term). Disable with `-DANTIPODAL_WITH_EMBREE=OFF`.
+- **OpenGL** — enables the compute-shader evaluator above (**default ON**, `ANTIPODAL_HAS_OPENGL`). Disable with `-DANTIPODAL_WITH_OPENGL=OFF`. The header links nothing itself; only the headless-context helper pulls in the platform GL/EGL libraries.
 
 If an enabled dependency cannot be found, CMake configuration will fail with a `find_package` error — install the package or turn the option off.
 

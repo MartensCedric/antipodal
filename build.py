@@ -119,12 +119,12 @@ def build(preset: str, vcpkg_toolchain: Path | None) -> Path:
     return build_dir
 
 
-def run_tests(build_dir: Path) -> None:
+def run_tests(build_dir: Path, test_args: list[str] | None = None) -> None:
     exe_name = "antipodal-tests.exe" if sys.platform == "win32" else "antipodal-tests"
     candidates = sorted(build_dir.rglob(exe_name))
     if not candidates:
         sys.exit(f"test binary {exe_name} not found under {build_dir}")
-    subprocess.run([str(candidates[0])], cwd=ROOT, check=True)
+    subprocess.run([str(candidates[0]), *(test_args or [])], cwd=ROOT, check=True)
 
 
 def main() -> None:
@@ -153,11 +153,20 @@ def main() -> None:
         action="store_true",
         help="Run the antipodal-tests binary after building.",
     )
+    parser.add_argument(
+        "test_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to the antipodal-tests binary "
+             "(everything after a literal '--'), e.g. -- --test-case='OpenGL*'.",
+    )
     args = parser.parse_args()
+
+    # argparse.REMAINDER keeps the leading '--' separator; drop it before forwarding.
+    test_args = args.test_args[1:] if args.test_args and args.test_args[0] == "--" else args.test_args
 
     build_dir = build(args.preset, None if args.no_vcpkg else args.vcpkg_toolchain)
     if args.run_tests:
-        run_tests(build_dir)
+        run_tests(build_dir, test_args)
 
 
 if __name__ == "__main__":
