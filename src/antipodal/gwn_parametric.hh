@@ -54,14 +54,14 @@
  * integer term, and the contract is identical to the mesh case.
  */
 
-#include <cassert>
-#include <span>
-
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/math/common.hh>
 #include <antipodal/math/fwd_diff.hh>
 #include <antipodal/math/integrate.hh>
 #include <antipodal/math/integrate_gk15.hh>
+
+#include <cassert>
+#include <span>
 
 namespace antipodal
 {
@@ -276,7 +276,8 @@ void eval_gwnr_parametric_batch(Dispatcher& dispatcher,
         0, cnt,
         [&](int i)
         {
-            auto const frac = eval_gwnr_parametric_single_fractional<T>(positions[i], x0, for_each_boundary, cfg, integrator);
+            auto const frac
+                = eval_gwnr_parametric_single_fractional<T>(positions[i], x0, for_each_boundary, cfg, integrator);
             auto const intg = intersector.signed_intersection_count(positions[i], x0);
             out_wnrs[i] = frac + static_cast<T>(intg);
         });

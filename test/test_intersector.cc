@@ -1,10 +1,10 @@
 #include "doctest.h"
 
-#include <vector>
-
-#include <antipodal/math/common.hh>
 #include <antipodal/intersector/intersector.hh>
 #include <antipodal/intersector/intersector_embree.hh>
+#include <antipodal/math/common.hh>
+
+#include <vector>
 
 namespace
 {
@@ -30,17 +30,47 @@ inline std::vector<int> unit_cube_indices()
 {
     return {
         // -Z face (n = -z)
-        0, 2, 1, 1, 2, 3,
+        0,
+        2,
+        1,
+        1,
+        2,
+        3,
         // +Z face (n = +z)
-        4, 5, 6, 6, 5, 7,
+        4,
+        5,
+        6,
+        6,
+        5,
+        7,
         // -X face (n = -x)
-        0, 4, 2, 2, 4, 6,
+        0,
+        4,
+        2,
+        2,
+        4,
+        6,
         // +X face (n = +x)
-        1, 3, 5, 5, 3, 7,
+        1,
+        3,
+        5,
+        5,
+        3,
+        7,
         // -Y face (n = -y)
-        0, 1, 4, 4, 1, 5,
+        0,
+        1,
+        4,
+        4,
+        1,
+        5,
         // +Y face (n = +y)
-        2, 6, 3, 3, 6, 7,
+        2,
+        6,
+        3,
+        3,
+        6,
+        7,
     };
 }
 } // namespace
@@ -86,12 +116,8 @@ TEST_CASE("EmbreeIntersector: agrees with NaiveIntersector<float> on the unit cu
     EmbreeIntersector embree{verts, idx};
 
     fvec3 const samples[] = {
-        {0.0f, 0.0f, 0.0f},
-        {0.1f, -0.2f, 0.3f},
-        {0.49f, 0.0f, 0.0f}, // near the +X face
-        {2.0f, 0.0f, 0.0f},
-        {-2.0f, -2.0f, -2.0f},
-        {0.0f, 1.5f, 0.0f},
+        {0.0f, 0.0f, 0.0f}, {0.1f, -0.2f, 0.3f},   {0.49f, 0.0f, 0.0f}, // near the +X face
+        {2.0f, 0.0f, 0.0f}, {-2.0f, -2.0f, -2.0f}, {0.0f, 1.5f, 0.0f},
     };
     fvec3 const dirs[] = {
         {1.0f, 0.0f, 0.0f},

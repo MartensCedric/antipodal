@@ -84,8 +84,10 @@ struct fwd_diff_diff
     static_assert(std::is_same_v<decltype(std::declval<T>() - std::declval<T>()), T>, "T - T must return T");
     static_assert(std::is_same_v<decltype(std::declval<T>() * std::declval<T>()), T>, "T * T must return T");
     static_assert(std::is_same_v<decltype(std::declval<T>() / std::declval<T>()), T>, "T / T must return T");
-    static_assert(std::is_convertible_v<decltype(std::declval<T>() == std::declval<T>()), bool>, "T == T must be convertible to bool");
-    static_assert(std::is_convertible_v<decltype(std::declval<T>() < std::declval<T>()), bool>, "T < T must be convertible to bool");
+    static_assert(std::is_convertible_v<decltype(std::declval<T>() == std::declval<T>()), bool>,
+                  "T == T must be convertible to bool");
+    static_assert(std::is_convertible_v<decltype(std::declval<T>() < std::declval<T>()), bool>,
+                  "T < T must be convertible to bool");
 };
 
 // -- reverse comparisons (T vs fwd_diff_diff) --
@@ -209,7 +211,8 @@ template <class T>
 template <class T>
 [[nodiscard]] constexpr fwd_diff_diff<T> operator*(fwd_diff_diff<T> const& a, fwd_diff_diff<T> const& b)
 {
-    return {a.value * b.value, a.d_value * b.value + a.value * b.d_value, a.dd_value * b.value + T(2) * a.d_value * b.d_value + a.value * b.dd_value};
+    return {a.value * b.value, a.d_value * b.value + a.value * b.d_value,
+            a.dd_value * b.value + T(2) * a.d_value * b.d_value + a.value * b.dd_value};
 }
 
 // (a / b)' = (a' * b - a * b') / b^2
@@ -359,7 +362,8 @@ template <class T>
     // u' = y' * log(x) + y * x' / x
     auto const du = y.d_value * log_x + y.value * x.d_value * inv_x;
     // u'' = y'' * log(x) + 2 * y' * x' / x + y * (x'' / x - x'^2 / x^2)
-    auto const ddu = y.dd_value * log_x + T(2) * y.d_value * x.d_value * inv_x + y.value * (x.dd_value * inv_x - x.d_value * x.d_value * inv_x * inv_x);
+    auto const ddu = y.dd_value * log_x + T(2) * y.d_value * x.d_value * inv_x
+                   + y.value * (x.dd_value * inv_x - x.d_value * x.d_value * inv_x * inv_x);
     auto const exp_u = std::exp(u);
     return {exp_u, exp_u * du, exp_u * (du * du + ddu)};
 }
@@ -605,7 +609,10 @@ template <class T>
 
 namespace fdd_detail
 {
-inline double value_scalar(double x) { return x; }
+inline double value_scalar(double x)
+{
+    return x;
+}
 
 template <class S>
 inline double value_scalar(fwd_diff_diff<S> const& x)

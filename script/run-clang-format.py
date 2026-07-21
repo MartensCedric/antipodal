@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["clang-format==19.1.7"]
+# dependencies = ["clang-format==22.1.7"]
 # ///
 """Apply clang-format -i to every tracked .cc/.hh in the repo.
 

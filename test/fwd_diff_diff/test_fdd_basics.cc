@@ -1,10 +1,10 @@
 #include "doctest.h"
 
-#include <cmath>
-#include <limits>
-
 #include <antipodal/math/common.hh>
 #include <antipodal/math/fwd_diff_diff.hh>
+
+#include <cmath>
+#include <limits>
 
 // ============================================================================
 // input / constant construction semantics

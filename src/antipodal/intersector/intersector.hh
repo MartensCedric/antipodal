@@ -42,11 +42,11 @@
  *   occluded-ray filter callback.
  */
 
+#include <antipodal/math/common.hh>
+
 #include <cassert>
 #include <cstddef>
 #include <span>
-
-#include <antipodal/math/common.hh>
 
 namespace antipodal
 {

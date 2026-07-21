@@ -1,17 +1,17 @@
 #include "doctest.h"
 #include "gwn_baseline.hh"
 
+#include <antipodal/dispatcher/dispatcher.hh>
+#include <antipodal/gwn_mesh.hh>
+#include <antipodal/gwn_mesh_robust.hh>
+#include <antipodal/intersector/intersector_embree.hh>
+#include <antipodal/math/common.hh>
+
 #include <algorithm>
 #include <cmath>
 #include <span>
 #include <type_traits>
 #include <vector>
-
-#include <antipodal/math/common.hh>
-#include <antipodal/dispatcher/dispatcher.hh>
-#include <antipodal/gwn_mesh.hh>
-#include <antipodal/gwn_mesh_robust.hh>
-#include <antipodal/intersector/intersector_embree.hh>
 
 // The robust path is Embree-backed; the whole suite is a no-op without it.
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
@@ -35,14 +35,9 @@ std::vector<antipodal::vec3<T>> unit_cube_vertices()
 {
     using V = antipodal::vec3<T>;
     return {
-        V{T(-0.5), T(-0.5), T(-0.5)},
-        V{T(+0.5), T(-0.5), T(-0.5)},
-        V{T(-0.5), T(+0.5), T(-0.5)},
-        V{T(+0.5), T(+0.5), T(-0.5)},
-        V{T(-0.5), T(-0.5), T(+0.5)},
-        V{T(+0.5), T(-0.5), T(+0.5)},
-        V{T(-0.5), T(+0.5), T(+0.5)},
-        V{T(+0.5), T(+0.5), T(+0.5)},
+        V{T(-0.5), T(-0.5), T(-0.5)}, V{T(+0.5), T(-0.5), T(-0.5)}, V{T(-0.5), T(+0.5), T(-0.5)},
+        V{T(+0.5), T(+0.5), T(-0.5)}, V{T(-0.5), T(-0.5), T(+0.5)}, V{T(+0.5), T(-0.5), T(+0.5)},
+        V{T(-0.5), T(+0.5), T(+0.5)}, V{T(+0.5), T(+0.5), T(+0.5)},
     };
 }
 
@@ -100,14 +95,14 @@ std::vector<antipodal::vec3<T>> sample_points()
 {
     using V = antipodal::vec3<T>;
     return {
-        V{T(0), T(0), T(0)},          // interior, on the y+z=0 diagonal
-        V{T(0.1), T(-0.2), T(0.3)},   // interior, generic
-        V{T(-0.4), T(0.4), T(-0.4)},  // interior, on the diagonal
-        V{T(0.49), T(0), T(0)},       // interior, near +X face, on the diagonal
-        V{T(2), T(0), T(0)},          // exterior, ray grazes both face diagonals
-        V{T(-2), T(-2), T(-2)},       // exterior, generic
-        V{T(0), T(1.5), T(0)},        // exterior, above the cube
-        V{T(1), T(1), T(1)},          // exterior, generic
+        V{T(0), T(0), T(0)},         // interior, on the y+z=0 diagonal
+        V{T(0.1), T(-0.2), T(0.3)},  // interior, generic
+        V{T(-0.4), T(0.4), T(-0.4)}, // interior, on the diagonal
+        V{T(0.49), T(0), T(0)},      // interior, near +X face, on the diagonal
+        V{T(2), T(0), T(0)},         // exterior, ray grazes both face diagonals
+        V{T(-2), T(-2), T(-2)},      // exterior, generic
+        V{T(0), T(1.5), T(0)},       // exterior, above the cube
+        V{T(1), T(1), T(1)},         // exterior, generic
     };
 }
 } // namespace

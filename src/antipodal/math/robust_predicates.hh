@@ -27,9 +27,9 @@
 // Both share the discontinuity.
 // As long as the sign is evaluated by the same integer code on both sides, the integer jump and the atan2 jump cancel.
 
-#include <cstdint>
-
 #include <antipodal/math/common.hh>
+
+#include <cstdint>
 
 namespace antipodal::robust
 {
@@ -47,7 +47,7 @@ using ivec3 = vec3<std::int32_t>;
 {
     // real part: 2x2 determinant of (q - q0) and (q1 - q0) in the (y,z) plane
     i64 const t_real = i64(q.y - q0.y) * i64(q0.z - q1.z) //
-                       + i64(q.z - q0.z) * i64(q1.y - q0.y);
+                     + i64(q.z - q0.z) * i64(q1.y - q0.y);
     if (t_real != 0)
         return t_real > 0 ? 1 : -1;
 

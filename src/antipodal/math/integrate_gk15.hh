@@ -67,8 +67,7 @@ auto integrate_gk15(F&& fun,
                     T b,
                     integrate_config const& cfg,
                     std::type_identity_t<T>* out_err = nullptr,
-                    int* out_intervals = nullptr)
-    -> std::conditional_t<Mode == integrate_mode::preinvoke, void, T>
+                    int* out_intervals = nullptr) -> std::conditional_t<Mode == integrate_mode::preinvoke, void, T>
 {
     using std::abs;
     namespace gk = detail::gk15;
@@ -236,10 +235,20 @@ auto integrate_gk15(F&& fun,
             else // preinvoke
             {
                 (void)f0;
-                (void)f1m; (void)f1p; (void)f2m; (void)f2p;
-                (void)f3m; (void)f3p; (void)f4m; (void)f4p;
-                (void)f5m; (void)f5p; (void)f6m; (void)f6p;
-                (void)f7m; (void)f7p;
+                (void)f1m;
+                (void)f1p;
+                (void)f2m;
+                (void)f2p;
+                (void)f3m;
+                (void)f3p;
+                (void)f4m;
+                (void)f4p;
+                (void)f5m;
+                (void)f5p;
+                (void)f6m;
+                (void)f6p;
+                (void)f7m;
+                (void)f7p;
                 (void)local_tol;
 
                 if (depth >= cfg.max_depth)

@@ -25,6 +25,10 @@
 #include <antipodal/math/robust_predicates.hh>
 
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
+#include <embree4/rtcore.h>
+#include <pmmintrin.h>
+#include <xmmintrin.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -33,11 +37,6 @@
 #include <limits>
 #include <span>
 #include <vector>
-
-#include <pmmintrin.h>
-#include <xmmintrin.h>
-
-#include <embree4/rtcore.h>
 
 namespace antipodal
 {
@@ -291,10 +290,7 @@ struct RobustMeshGwn
     }
 
     // Full robust GWN: fractional boundary term + integer ray-crossing term.
-    [[nodiscard]] T eval(vec3<T> p) const
-    {
-        return fractional(p) + static_cast<T>(signed_intersection_count(p));
-    }
+    [[nodiscard]] T eval(vec3<T> p) const { return fractional(p) + static_cast<T>(signed_intersection_count(p)); }
 
 private:
     [[nodiscard]] static dvec3 to_d(vec3<T> p) { return {double(p.x), double(p.y), double(p.z)}; }

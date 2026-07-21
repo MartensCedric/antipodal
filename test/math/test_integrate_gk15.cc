@@ -1,11 +1,11 @@
 #include "doctest.h"
 
+#include <antipodal/math/fwd_diff_diff.hh>
+#include <antipodal/math/integrate_gk15.hh>
+
 #include <cmath>
 #include <numbers>
 #include <set>
-
-#include <antipodal/math/fwd_diff_diff.hh>
-#include <antipodal/math/integrate_gk15.hh>
 
 using antipodal::integrate_config;
 using antipodal::integrate_gk15;
@@ -20,7 +20,8 @@ TEST_CASE("gk15 - integrates sin(t) on [0, pi] to 2")
     integrate_config const cfg{.min_depth = 0, .max_depth = 10, .tol = 1e-10};
     double err = -1.0;
     int n = -1;
-    auto const r = integrate_gk15([](int, double t) { return std::sin(t); }, 0.0, std::numbers::pi_v<double>, cfg, &err, &n);
+    auto const r
+        = integrate_gk15([](int, double t) { return std::sin(t); }, 0.0, std::numbers::pi_v<double>, cfg, &err, &n);
     CHECK(r == doctest::Approx(2.0).epsilon(1e-12));
     CHECK(err >= 0.0);
     CHECK(n >= 1);
@@ -101,7 +102,11 @@ TEST_CASE("gk15 - preinvoke index set is a superset of evaluate's")
 
     std::set<int> pre_indices;
     integrate_gk15<integrate_mode::preinvoke>(
-        [&](int idx, double) { pre_indices.insert(idx); return 0.0; }, // return value irrelevant
+        [&](int idx, double)
+        {
+            pre_indices.insert(idx);
+            return 0.0;
+        }, // return value irrelevant
         0.0, 1.0, cfg);
 
     std::set<int> eval_indices;
@@ -129,9 +134,7 @@ TEST_CASE("gk15 - integrand t * x propagates derivatives in x")
     auto const x = fdd64::input(2.0);
     integrate_config const cfg{.min_depth = 0, .max_depth = 6, .tol = 1e-10};
 
-    auto const r = integrate_gk15(
-        [&](int, fdd64 t) { return t * x; },
-        fdd64(0.0), fdd64(1.0), cfg);
+    auto const r = integrate_gk15([&](int, fdd64 t) { return t * x; }, fdd64(0.0), fdd64(1.0), cfg);
 
     // Analytic: ∫_0^1 t * x dt = x / 2 = (1.0, 0.5, 0.0)
     CHECK(r.value == doctest::Approx(1.0).epsilon(1e-12));

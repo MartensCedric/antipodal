@@ -19,14 +19,13 @@
 #include <antipodal/math/common.hh>
 
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
-#include <cassert>
-#include <limits>
-#include <span>
-
+#include <embree4/rtcore.h>
 #include <pmmintrin.h>
 #include <xmmintrin.h>
 
-#include <embree4/rtcore.h>
+#include <cassert>
+#include <limits>
+#include <span>
 
 namespace antipodal
 {
@@ -42,10 +41,10 @@ struct EmbreeIntersector
         auto geom = rtcNewGeometry(m_device, RTC_GEOMETRY_TYPE_TRIANGLE);
 
         // Shared buffers: zero-copy, caller keeps the data alive.
-        rtcSetSharedGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3,
-                                   vertices.data(), 0, sizeof(fvec3), vertices.size());
-        rtcSetSharedGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3,
-                                   indices.data(), 0, 3 * sizeof(int), indices.size() / 3);
+        rtcSetSharedGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0, RTC_FORMAT_FLOAT3, vertices.data(), 0,
+                                   sizeof(fvec3), vertices.size());
+        rtcSetSharedGeometryBuffer(geom, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, indices.data(), 0, 3 * sizeof(int),
+                                   indices.size() / 3);
 
         rtcCommitGeometry(geom);
         rtcAttachGeometry(m_scene, geom);

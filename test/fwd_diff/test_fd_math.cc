@@ -1,10 +1,9 @@
 #include "doctest.h"
-
 #include "fwd_diff_diff/fdd_test_utils.hh"
 
-#include <cmath>
-
 #include <antipodal/math/fwd_diff.hh>
+
+#include <cmath>
 
 using antipodal_test::fd_first;
 using antipodal_test::fuzz_run;

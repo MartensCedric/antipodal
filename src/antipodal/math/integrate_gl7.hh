@@ -50,8 +50,7 @@ auto integrate_gl7(F&& fun,
                    T b,
                    integrate_config const& cfg,
                    std::type_identity_t<T>* out_err = nullptr,
-                   int* out_intervals = nullptr)
-    -> std::conditional_t<Mode == integrate_mode::preinvoke, void, T>
+                   int* out_intervals = nullptr) -> std::conditional_t<Mode == integrate_mode::preinvoke, void, T>
 {
     using std::abs;
     namespace gl = detail::gl7;
@@ -124,8 +123,8 @@ auto integrate_gl7(F&& fun,
             if constexpr (Mode == integrate_mode::evaluate)
             {
                 T const I1 = eval_segment(idx, aa, bb);
-                T const I2 = eval_segment(idx * 2 + 1, aa, mid)  //
-                             + eval_segment(idx * 2 + 2, mid, bb);
+                T const I2 = eval_segment(idx * 2 + 1, aa, mid) //
+                           + eval_segment(idx * 2 + 2, mid, bb);
 
                 T const err = abs(I2 - I1);
                 bool const at_max = depth >= cfg.max_depth;

@@ -1,9 +1,9 @@
 #include "doctest.h"
 
+#include <antipodal/math/common.hh>
+
 #include <cmath>
 #include <type_traits>
-
-#include <antipodal/math/common.hh>
 
 namespace
 {
@@ -116,5 +116,6 @@ TEST_CASE_TEMPLATE("signed_spherical_tri_area_half_unorm: invariant under unifor
     // Independently scale each vector — the unnormalized formulation only
     // depends on direction, not magnitude.
     CHECK(signed_spherical_tri_area_half_unorm<T>(x1, T(7) * v0, T(0.01) * v1) == doctest::Approx(baseline).epsilon(tol));
-    CHECK(signed_spherical_tri_area_half_unorm<T>(x1, T(0.001) * v0, T(1000) * v1) == doctest::Approx(baseline).epsilon(tol));
+    CHECK(signed_spherical_tri_area_half_unorm<T>(x1, T(0.001) * v0, T(1000) * v1)
+          == doctest::Approx(baseline).epsilon(tol));
 }

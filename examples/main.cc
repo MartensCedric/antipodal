@@ -102,9 +102,9 @@ void colormap(T w, unsigned char& r, unsigned char& g, unsigned char& b)
     {
         T r, g, b;
     };
-    constexpr rgb c_out{47, 89, 148};    // #2F5994 at w = 0
-    constexpr rgb c_in{243, 230, 118};   // #F3E676 at w = 1
-    constexpr rgb c_neg{210, 85, 46};    // #D2552E at w = -1
+    constexpr rgb c_out{47, 89, 148};  // #2F5994 at w = 0
+    constexpr rgb c_in{243, 230, 118}; // #F3E676 at w = 1
+    constexpr rgb c_neg{210, 85, 46};  // #D2552E at w = -1
 
     w = std::clamp(w, T(-1), T(1));
     rgb const& target = (w >= 0) ? c_in : c_neg;

@@ -1,15 +1,15 @@
 #include "doctest.h"
 #include "gwn_baseline.hh"
 
-#include <cmath>
-#include <type_traits>
-#include <vector>
-
-#include <antipodal/math/common.hh>
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/dispatcher/dispatcher_tbb.hh>
 #include <antipodal/gwn_mesh.hh>
 #include <antipodal/intersector/intersector.hh>
+#include <antipodal/math/common.hh>
+
+#include <cmath>
+#include <type_traits>
+#include <vector>
 
 namespace
 {
@@ -28,14 +28,9 @@ std::vector<antipodal::vec3<T>> unit_cube_vertices()
 {
     using V = antipodal::vec3<T>;
     return {
-        V{T(-0.5), T(-0.5), T(-0.5)},
-        V{T(+0.5), T(-0.5), T(-0.5)},
-        V{T(-0.5), T(+0.5), T(-0.5)},
-        V{T(+0.5), T(+0.5), T(-0.5)},
-        V{T(-0.5), T(-0.5), T(+0.5)},
-        V{T(+0.5), T(-0.5), T(+0.5)},
-        V{T(-0.5), T(+0.5), T(+0.5)},
-        V{T(+0.5), T(+0.5), T(+0.5)},
+        V{T(-0.5), T(-0.5), T(-0.5)}, V{T(+0.5), T(-0.5), T(-0.5)}, V{T(-0.5), T(+0.5), T(-0.5)},
+        V{T(+0.5), T(+0.5), T(-0.5)}, V{T(-0.5), T(-0.5), T(+0.5)}, V{T(+0.5), T(-0.5), T(+0.5)},
+        V{T(-0.5), T(+0.5), T(+0.5)}, V{T(+0.5), T(+0.5), T(+0.5)},
     };
 }
 
@@ -55,11 +50,7 @@ inline std::vector<int> unit_cube_indices_closed()
 inline std::vector<int> unit_cube_indices_open_y()
 {
     return {
-        0, 2, 1, 1, 2, 3,
-        4, 5, 6, 6, 5, 7,
-        0, 4, 2, 2, 4, 6,
-        1, 3, 5, 5, 3, 7,
-        0, 1, 4, 4, 1, 5,
+        0, 2, 1, 1, 2, 3, 4, 5, 6, 6, 5, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 5, 3, 7, 0, 1, 4, 4, 1, 5,
     };
 }
 
@@ -101,14 +92,8 @@ std::vector<antipodal::vec3<T>> sample_points()
 {
     using V = antipodal::vec3<T>;
     return {
-        V{T(0), T(0), T(0)},
-        V{T(0.1), T(-0.2), T(0.3)},
-        V{T(-0.4), T(0.4), T(-0.4)},
-        V{T(0.49), T(0), T(0)},
-        V{T(2), T(0), T(0)},
-        V{T(-2), T(-2), T(-2)},
-        V{T(0), T(1.5), T(0)},
-        V{T(1), T(1), T(1)},
+        V{T(0), T(0), T(0)}, V{T(0.1), T(-0.2), T(0.3)}, V{T(-0.4), T(0.4), T(-0.4)}, V{T(0.49), T(0), T(0)},
+        V{T(2), T(0), T(0)}, V{T(-2), T(-2), T(-2)},     V{T(0), T(1.5), T(0)},       V{T(1), T(1), T(1)},
     };
 }
 } // namespace
@@ -166,7 +151,8 @@ TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch: matches CPU baseline (single-thread)",
 
     SinglethreadDispatcher disp;
     std::vector<T> batch_out(points.size());
-    eval_gwnr_mesh_batch(disp, intersector, std::span<vec3<T> const>{points}, std::span<T>{batch_out}, x0, empty_boundary);
+    eval_gwnr_mesh_batch(disp, intersector, std::span<vec3<T> const>{points}, std::span<T>{batch_out}, x0,
+                         empty_boundary);
 
     for (std::size_t i = 0; i < points.size(); ++i)
     {

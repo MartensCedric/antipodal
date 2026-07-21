@@ -83,8 +83,10 @@ struct fwd_diff
     static_assert(std::is_same_v<decltype(std::declval<T>() - std::declval<T>()), T>, "T - T must return T");
     static_assert(std::is_same_v<decltype(std::declval<T>() * std::declval<T>()), T>, "T * T must return T");
     static_assert(std::is_same_v<decltype(std::declval<T>() / std::declval<T>()), T>, "T / T must return T");
-    static_assert(std::is_convertible_v<decltype(std::declval<T>() == std::declval<T>()), bool>, "T == T must be convertible to bool");
-    static_assert(std::is_convertible_v<decltype(std::declval<T>() < std::declval<T>()), bool>, "T < T must be convertible to bool");
+    static_assert(std::is_convertible_v<decltype(std::declval<T>() == std::declval<T>()), bool>,
+                  "T == T must be convertible to bool");
+    static_assert(std::is_convertible_v<decltype(std::declval<T>() < std::declval<T>()), bool>,
+                  "T < T must be convertible to bool");
 };
 
 // -- reverse comparisons (T vs fwd_diff) --
@@ -537,7 +539,10 @@ template <class T>
 
 namespace fd_detail
 {
-inline double value_scalar(double x) { return x; }
+inline double value_scalar(double x)
+{
+    return x;
+}
 
 template <class S>
 inline double value_scalar(fwd_diff<S> const& x)

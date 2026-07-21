@@ -1,9 +1,5 @@
 #include "doctest.h"
 
-#include <random>
-#include <type_traits>
-#include <vector>
-
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/dispatcher/dispatcher_tbb.hh>
 #include <antipodal/gwn_mesh.hh>
@@ -12,6 +8,10 @@
 #include <antipodal/math/common.hh>
 #include <antipodal/math/fwd_diff.hh>
 #include <antipodal/math/integrate_gl7.hh>
+
+#include <random>
+#include <type_traits>
+#include <vector>
 
 namespace
 {
@@ -31,14 +31,9 @@ std::vector<antipodal::vec3<T>> unit_cube_vertices()
 {
     using V = antipodal::vec3<T>;
     return {
-        V{T(-0.5), T(-0.5), T(-0.5)},
-        V{T(+0.5), T(-0.5), T(-0.5)},
-        V{T(-0.5), T(+0.5), T(-0.5)},
-        V{T(+0.5), T(+0.5), T(-0.5)},
-        V{T(-0.5), T(-0.5), T(+0.5)},
-        V{T(+0.5), T(-0.5), T(+0.5)},
-        V{T(-0.5), T(+0.5), T(+0.5)},
-        V{T(+0.5), T(+0.5), T(+0.5)},
+        V{T(-0.5), T(-0.5), T(-0.5)}, V{T(+0.5), T(-0.5), T(-0.5)}, V{T(-0.5), T(+0.5), T(-0.5)},
+        V{T(+0.5), T(+0.5), T(-0.5)}, V{T(-0.5), T(-0.5), T(+0.5)}, V{T(+0.5), T(-0.5), T(+0.5)},
+        V{T(-0.5), T(+0.5), T(+0.5)}, V{T(+0.5), T(+0.5), T(+0.5)},
     };
 }
 
@@ -57,11 +52,7 @@ inline std::vector<int> unit_cube_indices_closed()
 inline std::vector<int> unit_cube_indices_open_y()
 {
     return {
-        0, 2, 1, 1, 2, 3,
-        4, 5, 6, 6, 5, 7,
-        0, 4, 2, 2, 4, 6,
-        1, 3, 5, 5, 3, 7,
-        0, 1, 4, 4, 1, 5,
+        0, 2, 1, 1, 2, 3, 4, 5, 6, 6, 5, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 5, 3, 7, 0, 1, 4, 4, 1, 5,
     };
 }
 
@@ -231,7 +222,8 @@ TEST_CASE_TEMPLATE("eval_gwnr_parametric_single: open cube matches mesh GWN with
     for (auto const& p : points)
     {
         auto const ref = eval_gwnr_mesh_single<NaiveIntersector<T>, T>(p, x0, mesh_boundary, intersector);
-        auto const got = eval_gwnr_parametric_single<NaiveIntersector<T>, T>(p, x0, param_boundary, intersector, cfg, gl7);
+        auto const got
+            = eval_gwnr_parametric_single<NaiveIntersector<T>, T>(p, x0, param_boundary, intersector, cfg, gl7);
         CHECK(got == doctest::Approx(ref).epsilon(tol));
     }
 }
@@ -256,7 +248,8 @@ TEST_CASE_TEMPLATE("eval_gwnr_parametric_batch: open cube matches mesh GWN (sing
     std::vector<T> param_out(points.size());
     eval_gwnr_mesh_batch(disp, intersector, std::span<vec3<T> const>{points}, std::span<T>{mesh_out}, x0,
                          std::span<weighted_segment3<T> const>{mesh_boundary});
-    eval_gwnr_parametric_batch(disp, intersector, std::span<vec3<T> const>{points}, std::span<T>{param_out}, x0, param_boundary);
+    eval_gwnr_parametric_batch(disp, intersector, std::span<vec3<T> const>{points}, std::span<T>{param_out}, x0,
+                               param_boundary);
 
     for (std::size_t i = 0; i < points.size(); ++i)
         CHECK(param_out[i] == doctest::Approx(mesh_out[i]).epsilon(tol));
@@ -283,7 +276,8 @@ TEST_CASE_TEMPLATE("eval_gwnr_parametric_batch: open cube matches mesh GWN (TBB)
     std::vector<T> param_out(points.size());
     eval_gwnr_mesh_batch(tbb, intersector, std::span<vec3<T> const>{points}, std::span<T>{mesh_out}, x0,
                          std::span<weighted_segment3<T> const>{mesh_boundary});
-    eval_gwnr_parametric_batch(tbb, intersector, std::span<vec3<T> const>{points}, std::span<T>{param_out}, x0, param_boundary);
+    eval_gwnr_parametric_batch(tbb, intersector, std::span<vec3<T> const>{points}, std::span<T>{param_out}, x0,
+                               param_boundary);
 
     for (std::size_t i = 0; i < points.size(); ++i)
         CHECK(param_out[i] == doctest::Approx(mesh_out[i]).epsilon(tol));
