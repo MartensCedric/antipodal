@@ -30,6 +30,18 @@ constexpr T eps_for()
         return T(1e-5);
 }
 
+// Run the robust tests at both precisions. Doctest can't take commas in the type list, hence the aliases.
+template <class T, int B>
+struct robust_cfg
+{
+    using scalar = T;
+    static constexpr int bits = B;
+};
+using f64 = robust_cfg<float, 64>;
+using d64 = robust_cfg<double, 64>;
+using f128 = robust_cfg<float, 128>;
+using d128 = robust_cfg<double, 128>;
+
 template <class T>
 std::vector<antipodal::vec3<T>> unit_cube_vertices()
 {
@@ -107,15 +119,16 @@ std::vector<antipodal::vec3<T>> sample_points()
 }
 } // namespace
 
-TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing rays)", T, float, double)
+TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing rays)", Cfg, f64, d64, f128, d128)
 {
     using namespace antipodal;
+    using T = typename Cfg::scalar;
     auto const tol = eps_for<T>();
     auto const verts = unit_cube_vertices<T>();
     auto const idx = unit_cube_indices_closed();
     std::span<weighted_segment3<T> const> empty_boundary{};
 
-    RobustMeshGwn<T> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
+    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
 
     for (auto const& p : sample_points<T>())
     {
@@ -124,16 +137,17 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing ray
     }
 }
 
-TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches CPU baseline", T, float, double)
+TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches CPU baseline", Cfg, f64, d64, f128, d128)
 {
     using namespace antipodal;
+    using T = typename Cfg::scalar;
     auto const tol = eps_for<T>();
     auto const verts = unit_cube_vertices<T>();
     auto const idx = unit_cube_indices_open_y();
     auto const boundary = unit_cube_open_y_boundary<T>();
 
-    RobustMeshGwn<T> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
-                            std::span<weighted_segment3<T> const>{boundary}};
+    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
+                                       std::span<weighted_segment3<T> const>{boundary}};
 
     for (auto const& p : sample_points<T>())
     {
@@ -142,15 +156,16 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches 
     }
 }
 
-TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-thread)", T, float, double)
+TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-thread)", Cfg, f64, d64, f128, d128)
 {
     using namespace antipodal;
+    using T = typename Cfg::scalar;
     auto const tol = eps_for<T>();
     auto const verts = unit_cube_vertices<T>();
     auto const idx = unit_cube_indices_closed();
     std::span<weighted_segment3<T> const> empty_boundary{};
 
-    RobustMeshGwn<T> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
+    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
 
     auto const points = sample_points<T>();
 
@@ -174,7 +189,7 @@ TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-th
 // So the total GWN jumps by ~1 across that plateau even though the true GWN is smooth.
 // The robust evaluator decides both terms from one quantized predicate, so it stays smooth.
 // We sweep ~1000 queries across such a grazing and compare the largest jump between neighboring queries.
-TEST_CASE("RobustMeshGwn: consistent across a grazing edge where the float frac/int split jumps")
+TEST_CASE_TEMPLATE("RobustMeshGwn: consistent across a grazing edge where the float frac/int split jumps", Cfg, d64, d128)
 {
     using namespace antipodal;
 
@@ -184,13 +199,13 @@ TEST_CASE("RobustMeshGwn: consistent across a grazing edge where the float frac/
     std::vector<int> const idx = {0, 1, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
 
-    RobustMeshGwn<double> const robust{verts, idx, boundary};
+    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
 
     // Non-robust reference: double fractional + Embree (float) integer.
     // Both run along the robust fixed axis, so it is the same method, only non-robust.
     std::vector<fvec3> const fverts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     EmbreeIntersector const embree{fverts, idx};
-    auto const x0 = RobustMeshGwn<double>::axis(); // (-1, 0, 0)
+    auto const x0 = RobustMeshGwn<double, Cfg::bits>::axis(); // (-1, 0, 0)
     fvec3 const x0f{float(x0.x), float(x0.y), float(x0.z)};
 
     auto const nonrobust = [&](vec3<double> p)
@@ -233,6 +248,104 @@ TEST_CASE("RobustMeshGwn: consistent across a grazing edge where the float frac/
     CHECK(max_jump_robust < 0.1);
     // ...whereas the non-robust split provokes the spurious ~1 jump.
     CHECK(max_jump_nonrobust > 0.5);
+}
+
+// Near an open edge the 64-bit grid (cells of about 5e-7 here) can snap the query across the edge,
+// which throws the value off by up to 0.5. The 128-bit grid should match the baseline.
+TEST_CASE("RobustMeshGwn: 128-bit precision is accurate within a 64-bit grid cell of an open edge")
+{
+    using namespace antipodal;
+
+    // Open triangle in the x=0 plane, hypotenuse on y+z=1.
+    std::vector<vec3<double>> const verts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    std::vector<int> const idx = {0, 1, 2};
+    auto const boundary = build_boundary_segments<double>(verts, idx);
+
+    RobustMeshGwn<double> const robust64{verts, idx, boundary};
+    RobustMeshGwn<double, 128> const robust128{verts, idx, boundary};
+
+    double max_err64 = 0.0;
+    double max_err128 = 0.0;
+    for (double const x : {1e-8, -1e-8, 1e-10, -1e-10})
+    {
+        for (double const dz : {1e-9, -1e-9})
+        {
+            vec3<double> const p{x, 0.3, 0.7 + dz}; // 1e-9 from the hypotenuse
+            double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
+            max_err64 = std::max(max_err64, std::abs(robust64.eval(p) - ref));
+            max_err128 = std::max(max_err128, std::abs(robust128.eval(p) - ref));
+        }
+    }
+
+    CHECK(max_err128 < 1e-6);
+    CHECK(max_err64 > 1e-2); // the 64-bit grid really is too coarse here
+}
+
+// An edge along the x axis seen from just off its line, so the -x ray runs almost along the edge.
+// The atan2 denominator used to cancel badly here.
+TEST_CASE_TEMPLATE("RobustMeshGwn: accurate for an edge seen along the ray", Cfg, d64, d128)
+{
+    using namespace antipodal;
+
+    std::vector<vec3<double>> const verts = {{0, 0, 0}, {1, 0, 0}, {0, 1, 1}};
+    std::vector<int> const idx = {0, 1, 2};
+    auto const boundary = build_boundary_segments<double>(verts, idx);
+    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+
+    double const tol = Cfg::bits == 128 ? 1e-10 : 1e-6;
+    for (double const x : {1.5, 3.0, 10.0})
+    {
+        for (double const off : {1e-4, 1e-6, 1e-8, 1e-10, 1e-12})
+        {
+            for (auto const [sy, sz] : {std::pair{1.0, 0.0}, {0.0, 1.0}, {1.0, -1.0}, {-1.0, 0.3}})
+            {
+                vec3<double> const p{x, off * sy, off * sz};
+                double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
+                CHECK(std::abs(robust.eval(p) - ref) < tol);
+            }
+        }
+    }
+}
+
+// The -x ray passes exactly through a boundary vertex. Both edges at that vertex used to add 0 there.
+TEST_CASE_TEMPLATE("RobustMeshGwn: ray through a boundary vertex", Cfg, d64, d128)
+{
+    using namespace antipodal;
+
+    std::vector<vec3<double>> const verts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0.5, 1, 1}};
+    std::vector<int> const idx = {0, 1, 2, 1, 3, 2};
+    auto const boundary = build_boundary_segments<double>(verts, idx);
+    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+
+    for (auto const& v : verts)
+    {
+        for (double const d : {0.25, 1.0, 3.0, 17.0})
+        {
+            vec3<double> const p{v.x + d, v.y, v.z};
+            double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
+            CHECK(std::abs(robust.eval(p) - ref) < 1e-6);
+        }
+    }
+}
+
+// Queries thousands of mesh sizes away used to overflow the quantized coordinates.
+TEST_CASE_TEMPLATE("RobustMeshGwn: far away queries", Cfg, d64, d128)
+{
+    using namespace antipodal;
+
+    std::vector<vec3<double>> const verts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    std::vector<int> const idx = {0, 1, 2};
+    auto const boundary = build_boundary_segments<double>(verts, idx);
+    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+
+    for (double const d : {1e3, 5e3, 1e5, 1e9})
+    {
+        for (vec3<double> const p : {vec3<double>{0.5, d, 0.2}, {d, 0.2, 0.2}, {-d, 0.2, 0.2}, {d, -d, d}})
+        {
+            double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
+            CHECK(std::abs(robust.eval(p) - ref) < 1e-6);
+        }
+    }
 }
 
 #endif // ANTIPODAL_HAS_EMBREE

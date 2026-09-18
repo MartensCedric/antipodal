@@ -61,6 +61,7 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
         test/fwd_diff/test_fd_math.cc
         test/math/test_integrate_gk15.cc
         test/math/test_integrate_gl7.cc
+        test/math/test_robust_predicates.cc
     )
     target_link_libraries(antipodal-tests PRIVATE antipodal)
     target_include_directories(antipodal-tests PRIVATE test)
