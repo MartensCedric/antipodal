@@ -251,7 +251,8 @@ boundary instead of a crisp inside/outside edge.
 
 ## Comparison with Fast and Exact Winding Numbers (FEWN)
 
-We benchmark against FEWN (Xie, 2026) on all 1,789 open meshes of Thingi10K.
+Concurrent to our work, FEWN (Xie, 2026) also provides a method to compute generalized winding numbers.
+We benchmark against it on all 1,789 open meshes of Thingi10K.
 Each mesh is evaluated on a 16³ grid of query points over its padded bounding box, single-threaded for both methods.
 Speedups are FEWN time / our time per mesh:
 
