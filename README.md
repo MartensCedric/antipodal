@@ -249,6 +249,22 @@ The shipped demo mesh [`examples/rotated_cube_open.obj`](examples/rotated_cube_o
 cube with one face removed, so the slice shows the smooth fractional-term transition along the open
 boundary instead of a crisp inside/outside edge.
 
+## Comparison with Fast and Exact Winding Numbers (FEWN)
+
+We benchmark against FEWN (Xie, 2026) on all 1,789 open meshes of Thingi10K.
+Each mesh is evaluated on a 16³ grid of query points over its padded bounding box, single-threaded for both methods.
+Speedups are FEWN time / our time per mesh:
+
+| Phase | Geo. mean | Median | Range | Meshes where we are faster |
+|---|---|---|---|---|
+| Queries | 7.2× | 5.8× | 3.1× – 1041× | 100% |
+| Preprocessing (BVH + boundary) | 1.5× | 1.5× | 0.42× – 118× | 91% |
+
+<p align="center">
+  <img src="docs/speedup_histogram_fewn.png" width="48%" alt="Query speedup over FEWN">
+  <img src="docs/fewn_scatter_boundaries.png" width="48%" alt="Query throughput vs. boundary size">
+</p>
+
 ## Citation
 
 If you use this library, please cite the paper
