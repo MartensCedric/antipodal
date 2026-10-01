@@ -89,9 +89,10 @@ endif()
 
 # Examples only build when antipodal is the top-level project
 if(ANTIPODAL_BUILD_EXAMPLES AND PROJECT_IS_TOP_LEVEL)
-    find_package(Stb REQUIRED) # vcpkg 'stb' port -> Stb_INCLUDE_DIR (stb_image_write.h)
+    # stb_image_write.h: vcpkg's 'stb' port (include/), distro packages (include/stb/), or any CMAKE_PREFIX_PATH entry
+    find_path(ANTIPODAL_STB_INCLUDE_DIR stb_image_write.h PATH_SUFFIXES stb REQUIRED)
 
     add_executable(antipodal-example-slice examples/main.cc)
     target_link_libraries(antipodal-example-slice PRIVATE antipodal)
-    target_include_directories(antipodal-example-slice PRIVATE ${Stb_INCLUDE_DIR})
+    target_include_directories(antipodal-example-slice PRIVATE ${ANTIPODAL_STB_INCLUDE_DIR})
 endif()

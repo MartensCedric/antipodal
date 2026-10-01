@@ -6,9 +6,9 @@ name: CI
 # skipping on a GPU-less runner. A separate cheap job checks formatting and that the
 # ANTIPODAL_HAS_* gating compiles with every optional dependency off.
 #
-# Everything builds through build.py with an explicit preset; dependencies (tbb,
-# embree, stb) come from a pinned vcpkg checkout with a per-job binary cache, since
-# embree from source dominates a cold build.
+# Everything builds through build.py with an explicit preset. Dependencies (tbb,
+# embree, stb) are prebuilt, never vcpkg: building embree from source took up to
+# 17 min per job. Linux uses apt, macOS brew, Windows the official release zips.
 
 on:
   push:
@@ -24,17 +24,19 @@ permissions:
   contents: read
 
 env:
-  # Bump deliberately: it decides the tbb/embree/stb versions and keys the binary cache.
-  VCPKG_COMMIT: 73248d88e09d43dfd7836902462a64fd2a43387b
-  VCPKG_ROOT: ${{ github.workspace }}/vcpkg-ci
-  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite
-  VCPKG_DISABLE_METRICS: "1"
+  # Release-zip versions for Windows; Linux and macOS take what apt / brew ship.
+  EMBREE_VERSION: 4.4.1
+  TBB_VERSION: 2022.3.0
+  # stb_image_write.h for macOS and Windows (apt has libstb-dev).
+  STB_COMMIT: 2c980bb59875b0d32144a71867fbdebb2f77cd20
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
 
 jobs:
   build-and-test:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -52,8 +54,6 @@ jobs:
           - name: Linux ARM Clang
             os: ubuntu-26.04-arm
             preset: arm64-linux-clang-ninja-relwithdebinfo
-            # vcpkg ships no prebuilt cmake/ninja for arm64 Linux; use the runner's.
-            vcpkg-system-binaries: "1"
           - name: Windows MSVC
             os: windows-2025
             preset: x64-windows-msvc-ninja-relwithdebinfo
@@ -67,7 +67,6 @@ jobs:
       run:
         shell: bash
     env:
-      VCPKG_FORCE_SYSTEM_BINARIES: ${{ matrix.vcpkg-system-binaries }}
       # Mesa picks X11/Wayland otherwise and fails on a headless runner.
       EGL_PLATFORM: surfaceless
       UBSAN_OPTIONS: print_stacktrace=1
@@ -84,12 +83,36 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libgl-dev libegl-dev \
+          sudo apt-get install -y --no-install-recommends libtbb-dev libembree-dev libstb-dev libgl-dev libegl-dev \
             ${{ matrix.mesa && 'libegl-mesa0 libgl1-mesa-dri' || '' }}
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ninja
+        run: |
+          brew install ninja embree
+          mkdir -p ci-deps/stb/include
+          curl -fsSL -o ci-deps/stb/include/stb_image_write.h "https://raw.githubusercontent.com/nothings/stb/$STB_COMMIT/stb_image_write.h"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix):$PWD/ci-deps/stb" >> "$GITHUB_ENV"
+
+      # Embree's zip bundles the TBB DLLs but not TBB's headers or CMake config, hence oneTBB's zip too.
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $deps = "$env:GITHUB_WORKSPACE\ci-deps"
+          New-Item -ItemType Directory -Force "$deps\stb\include" | Out-Null
+          curl.exe -fsSL -o "$deps\embree.zip" "https://github.com/RenderKit/embree/releases/download/v$env:EMBREE_VERSION/embree-$env:EMBREE_VERSION.x64.windows.zip"
+          curl.exe -fsSL -o "$deps\tbb.zip" "https://github.com/uxlfoundation/oneTBB/releases/download/v$env:TBB_VERSION/oneapi-tbb-$env:TBB_VERSION-win.zip"
+          curl.exe -fsSL -o "$deps\stb\include\stb_image_write.h" "https://raw.githubusercontent.com/nothings/stb/$env:STB_COMMIT/stb_image_write.h"
+          # System32's bsdtar reads zips (Git's GNU tar may shadow a bare `tar`).
+          $tar = "$env:SystemRoot\System32\tar.exe"
+          & $tar -xf "$deps\embree.zip" -C $deps
+          & $tar -xf "$deps\tbb.zip" -C $deps
+          $embree = "$deps\embree-$env:EMBREE_VERSION.x64.windows"
+          $tbb = "$deps\oneapi-tbb-$env:TBB_VERSION"
+          Add-Content $env:GITHUB_ENV "CMAKE_PREFIX_PATH=$tbb;$embree;$deps\stb"
+          Add-Content $env:GITHUB_PATH "$tbb\redist\intel64\vc14"
+          Add-Content $env:GITHUB_PATH "$embree\bin"
 
       # The image does not reliably put LLVM's bin on PATH, and the preset names a bare clang-cl.
       - name: Put LLVM on PATH
@@ -100,32 +123,8 @@ jobs:
           if (-not (Test-Path "$llvm\clang-cl.exe")) { throw "no clang-cl.exe under $llvm - the image moved LLVM" }
           Add-Content $env:GITHUB_PATH $llvm
 
-      - name: Set up vcpkg
-        run: |
-          git init -q vcpkg-ci
-          git -C vcpkg-ci fetch -q --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_COMMIT"
-          git -C vcpkg-ci checkout -q FETCH_HEAD
-          if [ "$RUNNER_OS" = Windows ]; then ./vcpkg-ci/bootstrap-vcpkg.bat -disableMetrics; else ./vcpkg-ci/bootstrap-vcpkg.sh -disableMetrics; fi
-          mkdir -p vcpkg-bincache
-
-      - name: Restore vcpkg binary cache
-        id: vcpkg-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: vcpkg-bincache
-          key: vcpkg-${{ matrix.preset }}-${{ runner.arch }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: vcpkg-${{ matrix.preset }}-${{ runner.arch }}-${{ env.VCPKG_COMMIT }}-
-
       - name: Build
-        run: python build.py --preset ${{ matrix.preset }} --vcpkg-toolchain "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-
-      # Saved even when the build or tests fail, so a red run does not cost the next one the embree rebuild.
-      - name: Save vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: vcpkg-bincache
-          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+        run: python build.py --preset ${{ matrix.preset }} --no-vcpkg
 
       - name: Test
         run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
@@ -133,7 +132,7 @@ jobs:
   format-and-nodeps:
     name: Format + no optional deps
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
 
@@ -142,7 +141,7 @@ jobs:
       - name: clang-format check
         run: uv run script/run-clang-format.py --check
 
-      # TBB, Embree, OpenGL and the examples off: no vcpkg, just the compiler.
+      # TBB, Embree, OpenGL and the examples off: nothing installed, just the compiler.
       - name: Build
         run: uv run build.py --preset x64-linux-clang-ninja-nodeps --no-vcpkg
 

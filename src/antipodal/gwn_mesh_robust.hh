@@ -25,9 +25,8 @@
 #include <antipodal/math/robust_predicates.hh>
 
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
+#include <antipodal/intersector/intersector_embree.hh> // detail::embree_set_ftz_daz
 #include <embree4/rtcore.h>
-#include <pmmintrin.h>
-#include <xmmintrin.h>
 
 #include <algorithm>
 #include <cassert>
@@ -214,9 +213,7 @@ struct RobustMeshGwn
     // So, unlike the Intersector concept, it cannot honor an arbitrary per-query direction.
     [[nodiscard]] int signed_intersection_count(vec3<T> p) const
     {
-        // Embree recommends FTZ/DAZ on every traversal thread.
-        _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-        _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+        detail::embree_set_ftz_daz();
 
         detail::robust_query_context q;
         rtcInitRayQueryContext(&q.base);
