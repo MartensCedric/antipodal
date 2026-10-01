@@ -113,8 +113,8 @@ private:
         if (wglMakeCurrent(m_hdc, m_hglrc) == FALSE)
             return false;
 
-        // Without a GPU driver, Windows falls back to its GDI software GL 1.1 (no compute shaders): treat that as no context.
-        // GL_VERSION starts with "<major>.<minor>".
+        // Without a GPU driver, Windows falls back to its GDI software GL 1.1 (no compute shaders): treat that as no
+        // context. GL_VERSION starts with "<major>.<minor>".
         auto const v = reinterpret_cast<char const*>(glGetString(GL_VERSION));
         if (!v || v[0] < '0' || v[0] > '9' || v[1] != '.' || v[2] < '0' || v[2] > '9')
             return false;

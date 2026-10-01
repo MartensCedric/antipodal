@@ -71,9 +71,9 @@ jobs:
       EGL_PLATFORM: surfaceless
       UBSAN_OPTIONS: print_stacktrace=1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -141,9 +141,9 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10
 
       - name: clang-format check
         run: uv run script/run-clang-format.py --check
