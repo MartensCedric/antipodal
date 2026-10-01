@@ -18,9 +18,9 @@
 
 namespace
 {
-// The robust path quantizes coordinates to ~20 bits, so its value precision is ~1e-6 regardless of T.
+// The coarsest policy, int64_grid, quantizes coordinates to ~20 bits, so its value precision is ~1e-6 regardless of T.
 // The exactness it buys is in the integer/fractional sign agreement, not in accurate mantissa bits.
-// Tolerances reflect that quantization floor, not the tighter float/double kernel tolerances.
+// Tests shared by all policies use tolerances for that quantization floor, not the tighter float/double kernel ones.
 template <class T>
 constexpr T eps_for()
 {
@@ -30,17 +30,26 @@ constexpr T eps_for()
         return T(1e-5);
 }
 
-// Run the robust tests at both precisions. Doctest can't take commas in the type list, hence the aliases.
-template <class T, int B>
+// Run the robust tests under every precision policy. Doctest can't take commas in the type list, hence the aliases.
+template <class T, class P>
 struct robust_cfg
 {
     using scalar = T;
-    static constexpr int bits = B;
+    using precision = P;
 };
-using f64 = robust_cfg<float, 64>;
-using d64 = robust_cfg<double, 64>;
-using f128 = robust_cfg<float, 128>;
-using d128 = robust_cfg<double, 128>;
+using f_i64 = robust_cfg<float, antipodal::robust::int64_grid>;
+using d_i64 = robust_cfg<double, antipodal::robust::int64_grid>;
+using f_i128 = robust_cfg<float, antipodal::robust::int128_grid>;
+using d_i128 = robust_cfg<double, antipodal::robust::int128_grid>;
+using f_exact = robust_cfg<float, antipodal::robust::exact_float>;
+using d_exact = robust_cfg<double, antipodal::robust::exact_float>;
+
+// How close a double query near the mesh gets to the baseline under policy P.
+template <class P>
+constexpr double near_tol()
+{
+    return std::is_same_v<P, antipodal::robust::int64_grid> ? 1e-6 : 1e-10;
+}
 
 template <class T>
 std::vector<antipodal::vec3<T>> unit_cube_vertices()
@@ -119,7 +128,14 @@ std::vector<antipodal::vec3<T>> sample_points()
 }
 } // namespace
 
-TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing rays)", Cfg, f64, d64, f128, d128)
+TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing rays)",
+                   Cfg,
+                   f_i64,
+                   d_i64,
+                   f_i128,
+                   d_i128,
+                   f_exact,
+                   d_exact)
 {
     using namespace antipodal;
     using T = typename Cfg::scalar;
@@ -128,7 +144,8 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing ray
     auto const idx = unit_cube_indices_closed();
     std::span<weighted_segment3<T> const> empty_boundary{};
 
-    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
+    RobustMeshGwn<T, typename Cfg::precision> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
+                                                     empty_boundary};
 
     for (auto const& p : sample_points<T>())
     {
@@ -137,7 +154,14 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: closed cube matches CPU baseline (grazing ray
     }
 }
 
-TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches CPU baseline", Cfg, f64, d64, f128, d128)
+TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches CPU baseline",
+                   Cfg,
+                   f_i64,
+                   d_i64,
+                   f_i128,
+                   d_i128,
+                   f_exact,
+                   d_exact)
 {
     using namespace antipodal;
     using T = typename Cfg::scalar;
@@ -146,8 +170,8 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches 
     auto const idx = unit_cube_indices_open_y();
     auto const boundary = unit_cube_open_y_boundary<T>();
 
-    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
-                                       std::span<weighted_segment3<T> const>{boundary}};
+    RobustMeshGwn<T, typename Cfg::precision> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
+                                                     std::span<weighted_segment3<T> const>{boundary}};
 
     for (auto const& p : sample_points<T>())
     {
@@ -156,7 +180,14 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: open cube (+Y removed) with boundary matches 
     }
 }
 
-TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-thread)", Cfg, f64, d64, f128, d128)
+TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-thread)",
+                   Cfg,
+                   f_i64,
+                   d_i64,
+                   f_i128,
+                   d_i128,
+                   f_exact,
+                   d_exact)
 {
     using namespace antipodal;
     using T = typename Cfg::scalar;
@@ -165,7 +196,8 @@ TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-th
     auto const idx = unit_cube_indices_closed();
     std::span<weighted_segment3<T> const> empty_boundary{};
 
-    RobustMeshGwn<T, Cfg::bits> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx}, empty_boundary};
+    RobustMeshGwn<T, typename Cfg::precision> robust{std::span<vec3<T> const>{verts}, std::span<int const>{idx},
+                                                     empty_boundary};
 
     auto const points = sample_points<T>();
 
@@ -189,7 +221,11 @@ TEST_CASE_TEMPLATE("eval_gwnr_mesh_batch_robust: matches CPU baseline (single-th
 // So the total GWN jumps by ~1 across that plateau even though the true GWN is smooth.
 // The robust evaluator decides both terms from one quantized predicate, so it stays smooth.
 // We sweep ~1000 queries across such a grazing and compare the largest jump between neighboring queries.
-TEST_CASE_TEMPLATE("RobustMeshGwn: consistent across a grazing edge where the float frac/int split jumps", Cfg, d64, d128)
+TEST_CASE_TEMPLATE("RobustMeshGwn: consistent across a grazing edge where the float frac/int split jumps",
+                   Cfg,
+                   d_i64,
+                   d_i128,
+                   d_exact)
 {
     using namespace antipodal;
 
@@ -199,13 +235,13 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: consistent across a grazing edge where the fl
     std::vector<int> const idx = {0, 1, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
 
-    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+    RobustMeshGwn<double, typename Cfg::precision> const robust{verts, idx, boundary};
 
     // Non-robust reference: double fractional + Embree (float) integer.
     // Both run along the robust fixed axis, so it is the same method, only non-robust.
     std::vector<fvec3> const fverts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     EmbreeIntersector const embree{fverts, idx};
-    auto const x0 = RobustMeshGwn<double, Cfg::bits>::axis(); // (-1, 0, 0)
+    auto const x0 = RobustMeshGwn<double, typename Cfg::precision>::axis(); // (-1, 0, 0)
     fvec3 const x0f{float(x0.x), float(x0.y), float(x0.z)};
 
     auto const nonrobust = [&](vec3<double> p)
@@ -250,9 +286,9 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: consistent across a grazing edge where the fl
     CHECK(max_jump_nonrobust > 0.5);
 }
 
-// Near an open edge the 64-bit grid (cells of about 5e-7 here) can snap the query across the edge,
-// which throws the value off by up to 0.5. The 128-bit grid should match the baseline.
-TEST_CASE("RobustMeshGwn: 128-bit precision is accurate within a 64-bit grid cell of an open edge")
+// Near an open edge the 20-bit grid (cells of about 5e-7 here) can snap the query across the edge,
+// which throws the value off by up to 0.5. The 50-bit grid and exact_float should match the baseline.
+TEST_CASE("RobustMeshGwn: int128_grid and exact_float are accurate within an int64_grid cell of an open edge")
 {
     using namespace antipodal;
 
@@ -261,11 +297,13 @@ TEST_CASE("RobustMeshGwn: 128-bit precision is accurate within a 64-bit grid cel
     std::vector<int> const idx = {0, 1, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
 
-    RobustMeshGwn<double> const robust64{verts, idx, boundary};
-    RobustMeshGwn<double, 128> const robust128{verts, idx, boundary};
+    RobustMeshGwn<double, robust::int64_grid> const robust64{verts, idx, boundary};
+    RobustMeshGwn<double, robust::int128_grid> const robust128{verts, idx, boundary};
+    RobustMeshGwn<double, robust::exact_float> const robust_exact{verts, idx, boundary};
 
     double max_err64 = 0.0;
     double max_err128 = 0.0;
+    double max_err_exact = 0.0;
     for (double const x : {1e-8, -1e-8, 1e-10, -1e-10})
     {
         for (double const dz : {1e-9, -1e-9})
@@ -274,25 +312,27 @@ TEST_CASE("RobustMeshGwn: 128-bit precision is accurate within a 64-bit grid cel
             double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
             max_err64 = std::max(max_err64, std::abs(robust64.eval(p) - ref));
             max_err128 = std::max(max_err128, std::abs(robust128.eval(p) - ref));
+            max_err_exact = std::max(max_err_exact, std::abs(robust_exact.eval(p) - ref));
         }
     }
 
     CHECK(max_err128 < 1e-6);
+    CHECK(max_err_exact < 1e-6);
     CHECK(max_err64 > 1e-2); // the 64-bit grid really is too coarse here
 }
 
 // An edge along the x axis seen from just off its line, so the -x ray runs almost along the edge.
 // The atan2 denominator used to cancel badly here.
-TEST_CASE_TEMPLATE("RobustMeshGwn: accurate for an edge seen along the ray", Cfg, d64, d128)
+TEST_CASE_TEMPLATE("RobustMeshGwn: accurate for an edge seen along the ray", Cfg, d_i64, d_i128, d_exact)
 {
     using namespace antipodal;
 
     std::vector<vec3<double>> const verts = {{0, 0, 0}, {1, 0, 0}, {0, 1, 1}};
     std::vector<int> const idx = {0, 1, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
-    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+    RobustMeshGwn<double, typename Cfg::precision> const robust{verts, idx, boundary};
 
-    double const tol = Cfg::bits == 128 ? 1e-10 : 1e-6;
+    double const tol = near_tol<typename Cfg::precision>();
     for (double const x : {1.5, 3.0, 10.0})
     {
         for (double const off : {1e-4, 1e-6, 1e-8, 1e-10, 1e-12})
@@ -308,14 +348,14 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: accurate for an edge seen along the ray", Cfg
 }
 
 // The -x ray passes exactly through a boundary vertex. Both edges at that vertex used to add 0 there.
-TEST_CASE_TEMPLATE("RobustMeshGwn: ray through a boundary vertex", Cfg, d64, d128)
+TEST_CASE_TEMPLATE("RobustMeshGwn: ray through a boundary vertex", Cfg, d_i64, d_i128, d_exact)
 {
     using namespace antipodal;
 
     std::vector<vec3<double>> const verts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}, {0.5, 1, 1}};
     std::vector<int> const idx = {0, 1, 2, 1, 3, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
-    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+    RobustMeshGwn<double, typename Cfg::precision> const robust{verts, idx, boundary};
 
     for (auto const& v : verts)
     {
@@ -329,21 +369,62 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: ray through a boundary vertex", Cfg, d64, d12
 }
 
 // Queries thousands of mesh sizes away used to overflow the quantized coordinates.
-TEST_CASE_TEMPLATE("RobustMeshGwn: far away queries", Cfg, d64, d128)
+// The grid policies clamp beyond about 500 mesh sizes, which costs up to ~1.5e-7 absolute there;
+// within that range, and for exact_float at any distance, the value keeps its precision.
+TEST_CASE_TEMPLATE("RobustMeshGwn: far away queries", Cfg, d_i64, d_i128, d_exact)
 {
     using namespace antipodal;
+    using P = typename Cfg::precision;
 
     std::vector<vec3<double>> const verts = {{0, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     std::vector<int> const idx = {0, 1, 2};
     auto const boundary = build_boundary_segments<double>(verts, idx);
-    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, boundary};
+    RobustMeshGwn<double, P> const robust{verts, idx, boundary};
 
-    for (double const d : {1e3, 5e3, 1e5, 1e9})
+    // the baseline itself is only accurate to ~1e-16 absolute out here, so these tolerances are absolute
+    double const near = std::is_same_v<P, robust::int64_grid> ? 1e-6 : 1e-12;
+    double const clamped = robust::is_grid_policy<P> ? 1e-6 : 1e-12;
+    for (double const d : {10.0, 100.0, 300.0, 1e3, 5e3, 1e5, 1e9})
     {
         for (vec3<double> const p : {vec3<double>{0.5, d, 0.2}, {d, 0.2, 0.2}, {-d, 0.2, 0.2}, {d, -d, d}})
         {
             double const ref = antipodal_test::eval_gwn_baseline<double>(p, verts, idx);
-            CHECK(std::abs(robust.eval(p) - ref) < 1e-6);
+            CHECK(std::abs(robust.eval(p) - ref) < (d <= 300.0 ? near : clamped));
+        }
+    }
+}
+
+// A closed tetrahedron whose face abc contains the x direction: its (y,z) projection is a segment in double,
+// but rounding onto the grid makes it a thin sliver, so the in-triangle test can accept a query near that line.
+// The front/back test must then agree with it; it used to divide by the double normal's x, which is exactly 0 here.
+// Every query is in front of the whole tetrahedron (x = 5), so the count must be 0.
+TEST_CASE_TEMPLATE("RobustMeshGwn: face parallel to the ray, queries in its plane", Cfg, d_i64, d_i128, d_exact)
+{
+    using namespace antipodal;
+
+    vec3<double> const a{0, 0.4303914952519497, 0.64558724287792457};
+    vec3<double> const b{1, 0.68425246596985911, 1.0263786989547887};
+    vec3<double> const c{0.29999999999999999, 0.19952205828266512, 0.29928308742399767};
+    vec3<double> const d{0.5, 0.83805533983482472, 0.25708300975223697};
+    REQUIRE(cross(b - a, c - a).x == 0.0); // the precondition this test is about
+
+    std::vector<vec3<double>> const verts = {a, b, c, d};
+    std::vector<int> const idx = {0, 1, 2, 0, 3, 1, 1, 3, 2, 2, 3, 0};
+    std::vector<weighted_segment3<double>> const no_boundary;
+    RobustMeshGwn<double, typename Cfg::precision> const robust{verts, idx, no_boundary};
+
+    // the query that used to count 1 at 128 bits
+    vec3<double> const q{5, 0.20194571032110109, 0.30291856548165164};
+    CHECK(robust.signed_intersection_count(q) == 0);
+
+    // the wall's line is z = 1.5 y; sweep along it, and just off it within a 64-bit grid cell
+    for (int i = 0; i <= 200; ++i)
+    {
+        double const y = c.y + (b.y - c.y) * (i / 200.0);
+        for (double const off : {0.0, 3e-7, -3e-7})
+        {
+            vec3<double> const p{5, y + off, 1.5 * y - off};
+            CHECK(robust.signed_intersection_count(p) == 0);
         }
     }
 }

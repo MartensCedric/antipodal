@@ -2,11 +2,11 @@
 
 // Unconditionally-robust generalized winding number for a triangle mesh.
 //
-// RobustMeshGwn<T> evaluates the full mesh GWN (fractional boundary + integer ray-crossing terms).
-// It uses exact integer predicates so the two terms always agree.
+// RobustMeshGwn<T, Precision> evaluates the full mesh GWN (fractional boundary + integer ray-crossing terms).
+// It uses exact predicates so the two terms always agree.
 // The classical floating-point evaluation can jump by ~±1 near the surface.
 // That happens when the integer count and the atan2 boundary term disagree on a grazing edge.
-// Here both terms are decided by the same quantized integer predicate.
+// Here both terms are decided by the same exact predicate.
 // See math/robust_predicates.hh for the coupling identity atan2_num == -t_real.
 // Their discontinuities therefore cancel exactly.
 //
@@ -14,7 +14,9 @@
 // The robust path instead bakes in a single fixed, axis-aligned ray (-x).
 // The symbolic perturbation makes that axis-aligned ray unable to fail.
 // So no caller x0, frame, or projection is needed.
-// World coordinates are quantized directly and both terms use the same fixed axis.
+// Both terms use the same fixed axis.
+// Precision (robust::int64_grid, int128_grid or exact_float) picks how the predicate is made exact;
+// see robust_predicates.hh for what each costs and how accurate it is.
 // The integer query takes no direction at all (the ray is baked in).
 // Use eval / eval_gwnr_mesh_batch_robust for the full, consistent GWN.
 //
@@ -42,11 +44,11 @@ namespace antipodal
 {
 namespace detail
 {
-// Quantized (integer) and double copies of a triangle, 1:1 by primID.
-// The integer copy drives the exact in-triangle predicate.
-// The double copy drives the (non-critical) front/back depth test.
+// The predicate's copy (quantized, or the doubles for exact_float) and a double copy of a triangle, 1:1 by primID.
+// The predicate's copy decides everything the count depends on: the in-triangle test and the front/back test.
+// The double copy only feeds Embree's bounding boxes.
 template <class C>
-struct robust_itriangle
+struct robust_ptriangle
 {
     vec3<C> pos0;
     vec3<C> pos1;
@@ -63,29 +65,27 @@ struct robust_dtriangle
 template <class C>
 struct robust_geom_data
 {
-    robust_itriangle<C> const* faces_iquant = nullptr;
+    robust_ptriangle<C> const* faces_pred = nullptr;
     robust_dtriangle const* faces_double = nullptr;
     std::size_t face_count = 0;
     double pad = 0.0; // world-space AABB slack; see robust_bounds_fn
 };
 
-// Ray-query context carrying the exact (quantized) query and the double query,
-// plus the accumulated signed intersection count.
+// Ray-query context carrying the predicate's query, plus the accumulated signed intersection count.
 template <class C>
 struct robust_query_context
 {
     RTCRayQueryContext base; // MUST be first for the reinterpret_cast below
     int sum;
-    vec3<C> qi; // quantized query (.x depth, (.y,.z) projection)
-    dvec3 qd;   // double query (for the front/back depth test)
+    vec3<C> qi; // query as the predicate sees it (.x depth, (.y,.z) projection)
 };
 
 // User-geometry bounds: the float AABB of the triangle, grown for two reasons.
 // Embree only invokes the callback for primitives whose reported (float) box the ray hits.
 // So the box must contain every query the predicate accepts, or a grazing hit is culled.
-// Slack source 1: the predicate tests the quantized query.
+// Slack source 1: a grid policy tests the quantized query.
 // A query up to ~half a quantization cell outside the true AABB is still counted.
-// data->pad (a couple of cells, derived from the quantizer) covers that.
+// data->pad (a couple of cells, derived from the quantizer; 0 for exact_float) covers that.
 // Slack source 2: converting the double box to float, and Embree testing the float ray origin.
 // std::nextafter rounds each bound one ULP outward to cover that.
 // False positives cost nothing — the exact predicate rejects them — so we err generous.
@@ -116,7 +116,7 @@ void robust_bounds_fn(RTCBoundsFunctionArguments const* args)
 }
 
 // Custom robust intersection for the -x ray.
-// First the exact in-triangle predicate in the (y,z) projection, then a double front/back test.
+// First the exact in-triangle predicate in the (y,z) projection, then the front/back test on the same triangle.
 // The ray direction is -x and the fractional part uses north pole N = +x = -dir (antipodal method).
 // The integer sign is sign(dir . n) = -sign(n.x).
 // Never reports occlusion, so traversal visits every candidate.
@@ -130,18 +130,19 @@ void robust_occluded_fn(RTCOccludedFunctionNArguments const* args)
     auto* ctx = reinterpret_cast<robust_query_context<C>*>(args->context);
     auto const primID = args->primID;
 
-    auto const& ti = data->faces_iquant[primID];
-    int const s = robust::inside_tri_sign(ctx->qi, ti.pos0, ti.pos1, ti.pos2); // == sign(n.x)
-    if (s == 0)
+    auto const& ti = data->faces_pred[primID];
+    auto const hit = robust::project_into_tri(ctx->qi, ti.pos0, ti.pos1, ti.pos2); // .sign == sign(n.x)
+    if (hit.sign == 0)
         return; // query projects outside this triangle (or degenerate projection)
 
-    // depth test in double: ray q + t*(-x) hits the supporting plane at t > 0 iff the tri is in front.
-    // s != 0 => n.x != 0, so the division is safe.
-    auto const& td = data->faces_double[primID];
-    auto const n = cross(td.pos1 - td.pos0, td.pos2 - td.pos0);
-    double const t = dot(n, td.pos0 - ctx->qd) / (-n.x); // ray dir = -x
-    if (t > 0)
-        ctx->sum += -s; // sign(dir . n), dir = -x
+    // The ray meets the triangle at the barycentric mix of its vertices' depths.
+    // That always lies between them, so the front/back answer cannot contradict the in-triangle test,
+    // however close to parallel to the ray the triangle is.
+    // Rounding in double only matters for a query within rounding of the triangle, where the GWN jumps anyway.
+    double const hit_x = (hit.w0 * double(ti.pos0.x) + hit.w1 * double(ti.pos1.x) + hit.w2 * double(ti.pos2.x))
+                       / (hit.w0 + hit.w1 + hit.w2);
+    if (double(ctx->qi.x) >= hit_x) // ray dir = -x; a tie is in front under the eps1 perturbation
+        ctx->sum += -hit.sign;      // sign(dir . n), dir = -x
 }
 } // namespace detail
 
@@ -151,22 +152,26 @@ void robust_occluded_fn(RTCOccludedFunctionNArguments const* args)
  * Built once from the mesh's vertices/indices and its weighted boundary
  * segments (e.g. from `build_boundary_segments`). Holds non-owning spans into
  * the caller's vertex/index/boundary data only during construction; afterwards
- * it owns all quantized geometry and the Embree acceleration structure, so the
+ * it owns the predicates' geometry and the Embree acceleration structure, so the
  * caller's arrays need not outlive the evaluator.
+ *
+ * Mesh coordinates must fit in float under every policy: Embree culls with float
+ * boxes, and a triangle beyond float range is never reported. Queries may lie
+ * farther out; each policy states its own query range.
  *
  * Thread-safe for concurrent const queries (the batch helper shares one
  * evaluator across threads).
  *
- * @tparam T    Scalar type of the query points (`float` or `double`).
- * @tparam Bits 64 (default) or 128. Width of the integers used by the exact
- *              predicates. 128 quantizes to a 50-bit grid instead of 20 bits,
- *              which gives about double precision instead of 1e-6 of the mesh
- *              size, at the cost of slower queries.
+ * @tparam T         Scalar type of the query points (`float` or `double`).
+ * @tparam Precision How the exact predicates are evaluated:
+ *                   robust::int64_grid, robust::int128_grid or robust::exact_float.
+ *                   The default is exact_float for double and int64_grid for float;
+ *                   robust_predicates.hh documents the accuracy and cost of each.
  */
-template <class T, int Bits = 64>
+template <class T, class Precision = robust::default_precision<T>>
 struct RobustMeshGwn
 {
-    using precision = robust::precision<Bits>;
+    using precision = Precision;
     using coord = typename precision::coord;
     using qvec3 = vec3<coord>;
 
@@ -180,14 +185,14 @@ struct RobustMeshGwn
 
         // --- quantized + double geometry (1:1 by primID) ---
         auto const n_tris = indices.size() / 3;
-        m_faces_i.reserve(n_tris);
+        m_faces_pred.reserve(n_tris);
         m_faces_d.reserve(n_tris);
         for (std::size_t t = 0; t < n_tris; ++t)
         {
             auto const a = to_d(vertices[indices[3 * t + 0]]);
             auto const b = to_d(vertices[indices[3 * t + 1]]);
             auto const c = to_d(vertices[indices[3 * t + 2]]);
-            m_faces_i.push_back({quantize(a), quantize(b), quantize(c)});
+            m_faces_pred.push_back({quantize(a), quantize(b), quantize(c)});
             m_faces_d.push_back({a, b, c});
         }
 
@@ -222,7 +227,7 @@ struct RobustMeshGwn
     [[nodiscard]] static constexpr vec3<T> axis() { return {T(-1), T(0), T(0)}; }
 
     // Integer term — signed ray-crossing count along the fixed -x ray.
-    // Takes no direction: the robust ray is baked into the quantization.
+    // Takes no direction: the robust ray is baked into the predicates.
     // So, unlike the Intersector concept, it cannot honor an arbitrary per-query direction.
     [[nodiscard]] int signed_intersection_count(vec3<T> p) const
     {
@@ -233,8 +238,7 @@ struct RobustMeshGwn
         detail::robust_query_context<coord> q;
         rtcInitRayQueryContext(&q.base);
         q.sum = 0;
-        q.qd = to_d(p);
-        q.qi = quantize(q.qd);
+        q.qi = quantize(to_d(p));
 
         RTCRay ray{};
         ray.org_x = float(p.x);
@@ -257,7 +261,7 @@ struct RobustMeshGwn
     }
 
     // Fractional term — the robust Van Oosterom-Strackee boundary integral.
-    // The atan2 numerator is the exact integer atan2_num.
+    // The atan2 numerator is atan2_num, whose sign is exact under every policy.
     // Only the grazing (num == 0) branch consults the perturbed sign.
     // That sign is locked to the ray-triangle predicate above, so the two terms agree.
     [[nodiscard]] T fractional(vec3<T> p) const
@@ -278,19 +282,19 @@ struct RobustMeshGwn
             double const l0 = length(d0);
             double const l1 = length(d1);
 
-            // exact integer atan2 numerator (== -t_real of the edge predicate)
+            // atan2 numerator with exact sign (== -t_real of the edge predicate)
             auto const num = robust::atan2_num(qi, seg.pos0, seg.pos1);
 
             // denom = l0*l1 + d0.x*l1 + d1.x*l0 + dot(d0, d1) = (l0 + d0.x)*(l1 + d1.x) + d0.y*d1.y + d0.z*d1.z.
             // l + d.x cancels badly when d points almost along -x (an edge seen along the ray),
-            // so there we use l + d.x = (d.y^2 + d.z^2) / (l - d.x). The (y,z) sums are exact integers.
+            // so there we use l + d.x = (d.y^2 + d.z^2) / (l - d.x). On a grid the (y,z) sums are exact integers.
             auto const l_plus_x = [](qvec3 v, double l)
             {
                 if (v.x >= 0)
                     return l + double(v.x);
-                return double(robust::mul_wide<coord>(v.y, v.y) + robust::mul_wide<coord>(v.z, v.z)) / (l - double(v.x));
+                return robust::dot_yz(v, v) / (l - double(v.x));
             };
-            double const yz_dot = double(robust::mul_wide<coord>(v0.y, v1.y) + robust::mul_wide<coord>(v0.z, v1.z));
+            double const yz_dot = robust::dot_yz(v0, v1);
             double const denom = l_plus_x(v0, l0) * l_plus_x(v1, l1) + yz_dot;
 
             double contrib;
@@ -329,54 +333,65 @@ struct RobustMeshGwn
 private:
     [[nodiscard]] static dvec3 to_d(vec3<T> p) { return {double(p.x), double(p.y), double(p.z)}; }
 
+    // The query or vertex as the predicates see it: on the grid, or the doubles themselves for exact_float.
     [[nodiscard]] qvec3 quantize(dvec3 p) const
     {
-        // Clamp far away queries so the determinants cannot overflow. The clamped point is still
-        // far outside the mesh, so the ray crossings are unchanged and the fractional term barely moves.
-        static constexpr double max_q = double(robust::i64(1) << (precision::grid_bits + 10));
-        auto const q = (p - m_center) * m_scale;
-        auto const round = [](double v) { return coord(std::llround(std::clamp(v, -max_q, max_q))); };
-        return {round(q.x), round(q.y), round(q.z)};
+        if constexpr (robust::is_grid_policy<precision>)
+        {
+            // Clamp far away queries so the determinants cannot overflow.
+            // The clamp sits at about 500 mesh sizes and never moves a query across the mesh's bounding box,
+            // so the ray crossings are unchanged; the fractional term stops decaying there,
+            // which costs up to ~1.5e-7 absolute beyond it.
+            static constexpr double max_q = double(robust::i64(1) << (precision::grid_bits + 10));
+            auto const q = (p - m_center) * m_scale;
+            auto const round = [](double v) { return coord(std::llround(std::clamp(v, -max_q, max_q))); };
+            return {round(q.x), round(q.y), round(q.z)};
+        }
+        else
+        {
+            return p;
+        }
     }
 
+    // Only the grid policies have a frame; exact_float keeps the defaults, center 0 and scale 1.
     void build_quantization(std::span<vec3<T> const> vertices)
     {
-        if (vertices.empty())
+        if constexpr (robust::is_grid_policy<precision>)
         {
-            m_center = {};
-            m_scale = 1.0;
-            return;
+            if (vertices.empty())
+                return;
+
+            auto mn = to_d(vertices[0]);
+            auto mx = mn;
+            for (auto const& v : vertices)
+            {
+                auto const d = to_d(v);
+                mn = {std::min(mn.x, d.x), std::min(mn.y, d.y), std::min(mn.z, d.z)};
+                mx = {std::max(mx.x, d.x), std::max(mx.y, d.y), std::max(mx.z, d.z)};
+            }
+
+            auto const ext = mx - mn;
+            m_center = mn + ext * 0.5;
+
+            // target a grid_bits magnitude so the 2x2 determinants cannot overflow
+            double const half = 0.5 * std::max({ext.x, ext.y, ext.z});
+            constexpr double max_coord = double((robust::i64(1) << precision::grid_bits) - 1);
+            m_scale = half > 0.0 ? max_coord / half : 1.0;
         }
-
-        auto mn = to_d(vertices[0]);
-        auto mx = mn;
-        for (auto const& v : vertices)
-        {
-            auto const d = to_d(v);
-            mn = {std::min(mn.x, d.x), std::min(mn.y, d.y), std::min(mn.z, d.z)};
-            mx = {std::max(mx.x, d.x), std::max(mx.y, d.y), std::max(mx.z, d.z)};
-        }
-
-        auto const ext = mx - mn;
-        m_center = mn + ext * 0.5;
-
-        double const half = 0.5 * std::max({ext.x, ext.y, ext.z});
-        // target a grid_bits magnitude so the 2x2 determinants cannot overflow
-        constexpr double max_coord = double((robust::i64(1) << precision::grid_bits) - 1);
-        m_scale = half > 0.0 ? max_coord / half : 1.0;
     }
 
     void build_embree()
     {
-        m_geom_data.faces_iquant = m_faces_i.data();
+        m_geom_data.faces_pred = m_faces_pred.data();
         m_geom_data.faces_double = m_faces_d.data();
-        m_geom_data.face_count = m_faces_i.size();
+        m_geom_data.face_count = m_faces_pred.size();
         // Two quantization cells of AABB slack.
         // One cell covers the ~half-cell a counted query can sit outside the true triangle box.
         // (The predicate uses the quantized query, hence that slack.)
         // The second cell is headroom.
         // 1/m_scale is one cell in world units, so this auto-scales with the mesh.
-        m_geom_data.pad = m_scale > 0.0 ? 2.0 / m_scale : 0.0;
+        // exact_float tests the query itself, so it needs none.
+        m_geom_data.pad = robust::is_grid_policy<precision> && m_scale > 0.0 ? 2.0 / m_scale : 0.0;
 
         m_device = rtcNewDevice(nullptr);
         m_scene = rtcNewScene(m_device);
@@ -384,7 +399,7 @@ private:
         rtcSetSceneFlags(m_scene, RTC_SCENE_FLAG_ROBUST);
 
         auto geom = rtcNewGeometry(m_device, RTC_GEOMETRY_TYPE_USER);
-        rtcSetGeometryUserPrimitiveCount(geom, unsigned(m_faces_i.size()));
+        rtcSetGeometryUserPrimitiveCount(geom, unsigned(m_faces_pred.size()));
         rtcSetGeometryUserData(geom, &m_geom_data);
         rtcSetGeometryBoundsFunction(geom, detail::robust_bounds_fn<coord>, nullptr);
         rtcSetGeometryOccludedFunction(geom, detail::robust_occluded_fn<coord>);
@@ -403,7 +418,7 @@ private:
 
     dvec3 m_center{};
     double m_scale = 1.0;
-    std::vector<detail::robust_itriangle<coord>> m_faces_i;
+    std::vector<detail::robust_ptriangle<coord>> m_faces_pred;
     std::vector<detail::robust_dtriangle> m_faces_d;
     std::vector<qsegment> m_boundary;
     detail::robust_geom_data<coord> m_geom_data;
@@ -420,15 +435,15 @@ private:
  *
  * @tparam Dispatcher Dispatcher concept (see @ref dispatcher.hh).
  * @tparam T          Scalar type.
- * @tparam Bits       Precision of the evaluator.
+ * @tparam Precision  Precision policy of the evaluator.
  * @param  dispatcher Parallel-for backend.
  * @param  robust     Shared robust evaluator; safe to query concurrently.
  * @param  positions  Input query points.
  * @param  out_wnrs   Output buffer; must have the same size as `positions`.
  */
-template <class Dispatcher, class T, int Bits>
+template <class Dispatcher, class T, class Precision>
 void eval_gwnr_mesh_batch_robust(Dispatcher& dispatcher,
-                                 RobustMeshGwn<T, Bits> const& robust,
+                                 RobustMeshGwn<T, Precision> const& robust,
                                  std::span<vec3<T> const> positions,
                                  std::span<T> out_wnrs)
 {
