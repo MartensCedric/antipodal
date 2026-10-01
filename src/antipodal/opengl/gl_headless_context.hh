@@ -110,7 +110,17 @@ private:
         if (!m_hglrc)
             return false;
 
-        return wglMakeCurrent(m_hdc, m_hglrc) != FALSE;
+        if (wglMakeCurrent(m_hdc, m_hglrc) == FALSE)
+            return false;
+
+        // Without a GPU driver, Windows falls back to its GDI software GL 1.1 (no compute shaders): treat that as no context.
+        // GL_VERSION starts with "<major>.<minor>".
+        auto const v = reinterpret_cast<char const*>(glGetString(GL_VERSION));
+        if (!v || v[0] < '0' || v[0] > '9' || v[1] != '.' || v[2] < '0' || v[2] > '9')
+            return false;
+        int const major = v[0] - '0';
+        int const minor = v[2] - '0';
+        return major > 4 || (major == 4 && minor >= 3);
     }
 
     void destroy()

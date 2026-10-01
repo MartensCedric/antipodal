@@ -129,6 +129,13 @@ jobs:
       - name: Test
         run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
 
+      # The OpenGL test skips (and passes) without a usable context; on the llvmpipe job that would hide a broken Mesa setup.
+      - name: Check the OpenGL test ran
+        if: matrix.mesa
+        run: |
+          ./build/${{ matrix.preset }}/antipodal-tests --test-case='OpenGL*' | tee gl-test.log
+          if grep -q "skipping GPU test" gl-test.log; then echo "::error::OpenGL test skipped on llvmpipe"; exit 1; fi
+
   format-and-nodeps:
     name: Format + no optional deps
     runs-on: ubuntu-26.04
