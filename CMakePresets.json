@@ -61,6 +61,26 @@
             }
         },
         {
+            "name": "x64-windows-clang-ninja-base",
+            "inherits": "x64-windows-base",
+            "generator": "Ninja",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_C_COMPILER": "clang-cl",
+                "CMAKE_CXX_COMPILER": "clang-cl"
+            }
+        },
+        {
+            "name": "x64-windows-clang-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo clang-cl (Ninja)",
+            "description": "Optimized build with debug symbols",
+            "inherits": "x64-windows-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
             "name": "x64-linux-base",
             "condition": {
                 "type": "equals",
@@ -109,6 +129,82 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo"
             }
+        },
+        {
+            "name": "x64-linux-clang-ninja-asan",
+            "displayName": "Debug Clang + ASan/UBSan (Ninja, Linux)",
+            "description": "Debug build with AddressSanitizer and UndefinedBehaviorSanitizer; vcpkg deps stay uninstrumented",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
+        },
+        {
+            "name": "x64-linux-clang-ninja-nodeps",
+            "displayName": "RelWithDebInfo Clang without optional deps (Ninja, Linux)",
+            "description": "TBB, Embree, OpenGL and the examples off: checks the ANTIPODAL_HAS_* gating; needs no vcpkg",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "ANTIPODAL_WITH_TBB": "OFF",
+                "ANTIPODAL_WITH_EMBREE": "OFF",
+                "ANTIPODAL_WITH_OPENGL": "OFF",
+                "ANTIPODAL_BUILD_EXAMPLES": "OFF"
+            }
+        },
+        {
+            "name": "x64-linux-gcc-ninja-base",
+            "inherits": "x64-linux-base",
+            "generator": "Ninja",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
+            "name": "x64-linux-gcc-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo GCC (Ninja, Linux)",
+            "description": "Optimized build with debug symbols",
+            "inherits": "x64-linux-gcc-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "arm64-linux-clang-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo Clang (Ninja, Linux arm64)",
+            "description": "Optimized build with debug symbols, native arm64 host",
+            "inherits": "x64-linux-clang-ninja-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "arm64-macos-base",
+            "hidden": true,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_OSX_ARCHITECTURES": "arm64"
+            }
+        },
+        {
+            "name": "arm64-macos-clang-ninja-relwithdebinfo",
+            "displayName": "RelWithDebInfo AppleClang (Ninja, macOS arm64)",
+            "description": "Optimized build with debug symbols",
+            "inherits": "arm64-macos-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
         }
     ],
     "buildPresets": [
@@ -135,6 +231,30 @@
         {
             "name": "relwithdebinfo-linux-clang",
             "configurePreset": "x64-linux-clang-ninja-relwithdebinfo"
+        },
+        {
+            "name": "relwithdebinfo-clang-cl",
+            "configurePreset": "x64-windows-clang-ninja-relwithdebinfo"
+        },
+        {
+            "name": "asan-linux-clang",
+            "configurePreset": "x64-linux-clang-ninja-asan"
+        },
+        {
+            "name": "nodeps-linux-clang",
+            "configurePreset": "x64-linux-clang-ninja-nodeps"
+        },
+        {
+            "name": "relwithdebinfo-linux-gcc",
+            "configurePreset": "x64-linux-gcc-ninja-relwithdebinfo"
+        },
+        {
+            "name": "relwithdebinfo-arm64-linux-clang",
+            "configurePreset": "arm64-linux-clang-ninja-relwithdebinfo"
+        },
+        {
+            "name": "relwithdebinfo-macos-clang",
+            "configurePreset": "arm64-macos-clang-ninja-relwithdebinfo"
         }
     ]
 }

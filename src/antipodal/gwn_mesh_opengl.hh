@@ -3,9 +3,10 @@
 // Raw-OpenGL compute-shader evaluator for dense grids of mesh GWN values (`OpenGLMeshGwn`).
 //
 // A current OpenGL 4.3 context must be active on the calling thread for the object's whole lifetime.
-// Entry points are resolved through a caller-supplied loader `void* (*)(char const*)` (wglGetProcAddress, eglGetProcAddress, glfwGetProcAddress, SDL_GL_GetProcAddress).
-// The header declares its own GL types / enums / entry points, so it needs no glad / glew / glfw and never collides with a consumer's own <GL/gl.h>.
-// The header links nothing itself; gl_headless_context.hh supplies an optional off-screen context.
+// Entry points are resolved through a caller-supplied loader `void* (*)(char const*)` (wglGetProcAddress,
+// eglGetProcAddress, glfwGetProcAddress, SDL_GL_GetProcAddress). The header declares its own GL types / enums / entry
+// points, so it needs no glad / glew / glfw and never collides with a consumer's own <GL/gl.h>. The header links
+// nothing itself; gl_headless_context.hh supplies an optional off-screen context.
 //
 // Header-only port of the research `volume-opengl` evaluator onto plain OpenGL 4.3 compute shaders.
 // The four passes mirror the antipodal decomposition:
@@ -13,7 +14,8 @@
 //   2. rasterize — scatter signed ray-crossings of every triangle.
 //   3. integrate — prefix-sum those crossings into the integer GWN term.
 //   4. wnr       — add the fractional boundary integral and store the full GWN.
-// The fractional pass uses the unnormalized Van Oosterom-Strackee form of `signed_spherical_tri_area_half_unorm` (math/common.hh), so the hot loop needs no per-edge `normalize()`.
+// The fractional pass uses the unnormalized Van Oosterom-Strackee form of `signed_spherical_tri_area_half_unorm`
+// (math/common.hh), so the hot loop needs no per-edge `normalize()`.
 //
 // Gated on `ANTIPODAL_HAS_OPENGL`; including it without that define is a no-op.
 
@@ -530,7 +532,8 @@ struct OpenGLMeshGwn
 
         // The other two axes become shader Y and Z.
         // Order them so the local frame (s_dy, s_dz, s_dx) is right-handed.
-        // The rasterizer derives each triangle's crossing sign from the local-space normal, so a left-handed frame would negate the whole integer term.
+        // The rasterizer derives each triangle's crossing sign from the local-space normal, so a left-handed frame
+        // would negate the whole integer term.
         int ax_y = (ia == 0) ? 1 : 0;
         int ax_z = (ia == 2) ? 1 : 2;
         if (dot(dirs[ax_y], cross(dirs[ax_z], dirs[ia])) < 0.0f)
@@ -585,7 +588,8 @@ struct OpenGLMeshGwn
         }
 
         // --- integrate: prefix-sum along the integration axis ---
-        // Skipped when the integration axis is a single cell: the length-1 prefix sum is the identity, so the rasterize output already holds the integer term.
+        // Skipped when the integration axis is a single cell: the length-1 prefix sum is the identity, so the rasterize
+        // output already holds the integer term.
         if (m_tri_count > 0 && cx > 1)
         {
             gl.UseProgram(m_prog_integrate);

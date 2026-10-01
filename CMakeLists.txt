@@ -67,10 +67,11 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
 
     # The OpenGL test spins up a headless context via gl_headless_context.hh,
     # which needs platform GL/EGL libraries linked into the test executable.
+    # macOS has no headless backend (the context helper is a stub there), so nothing to link.
     if(ANTIPODAL_WITH_OPENGL)
         if(WIN32)
             target_link_libraries(antipodal-tests PRIVATE opengl32 gdi32 user32)
-        elseif(UNIX)
+        elseif(UNIX AND NOT APPLE)
             find_package(OpenGL REQUIRED)
             find_library(ANTIPODAL_EGL_LIB EGL REQUIRED)
             target_link_libraries(antipodal-tests PRIVATE OpenGL::GL ${ANTIPODAL_EGL_LIB})
@@ -88,9 +89,10 @@ endif()
 
 # Examples only build when antipodal is the top-level project
 if(ANTIPODAL_BUILD_EXAMPLES AND PROJECT_IS_TOP_LEVEL)
-    find_package(Stb REQUIRED) # vcpkg 'stb' port -> Stb_INCLUDE_DIR (stb_image_write.h)
+    # stb_image_write.h: vcpkg's 'stb' port (include/), distro packages (include/stb/), or any CMAKE_PREFIX_PATH entry
+    find_path(ANTIPODAL_STB_INCLUDE_DIR stb_image_write.h PATH_SUFFIXES stb REQUIRED)
 
     add_executable(antipodal-example-slice examples/main.cc)
     target_link_libraries(antipodal-example-slice PRIVATE antipodal)
-    target_include_directories(antipodal-example-slice PRIVATE ${Stb_INCLUDE_DIR})
+    target_include_directories(antipodal-example-slice PRIVATE ${ANTIPODAL_STB_INCLUDE_DIR})
 endif()

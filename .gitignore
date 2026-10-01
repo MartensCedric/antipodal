@@ -6,6 +6,10 @@ cmake-build-*/
 CMakeUserPresets.json
 compile_commands.json
 
+# Python
+__pycache__/
+*.pyc
+
 # IDE / editor
 .vs/
 .vscode/
