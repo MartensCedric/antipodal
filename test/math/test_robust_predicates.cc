@@ -75,6 +75,26 @@ TEST_CASE("robust::int128: portable arithmetic")
     CHECK(double(int128::mul(hi, 2) - int128::mul(hi, 2) - int128(5)) == -5.0);
 }
 
+TEST_CASE("robust::int128: mul matches the portable schoolbook multiply")
+{
+    // On MSVC mul() is the hardware instruction; elsewhere both are the same code, and this is cheap.
+    constexpr auto lo = std::numeric_limits<std::int64_t>::min();
+    constexpr auto hi = std::numeric_limits<std::int64_t>::max();
+    std::int64_t const edge[] = {0, 1, -1, 2, -2, lo, lo + 1, hi, hi - 1, std::int64_t(1) << 32, -(std::int64_t(1) << 32)};
+    for (auto a : edge)
+        for (auto b : edge)
+            CHECK(int128::mul(a, b) == int128::mul_portable(a, b));
+
+    std::mt19937_64 rng(7);
+    for (int i = 0; i < 100000; ++i)
+    {
+        auto const a = std::int64_t(rng()), b = std::int64_t(rng());
+        CHECK(int128::mul(a, b) == int128::mul_portable(a, b));
+    }
+
+    static_assert(int128::mul(-3, 4) == int128(-12), "mul stays usable in constant expressions");
+}
+
 #if defined(__SIZEOF_INT128__) && !defined(_MSC_VER)
 TEST_CASE("robust::int128: matches the native __int128")
 {

@@ -32,6 +32,10 @@
 #include <cstdint>
 #include <type_traits>
 
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_ARM64))
+#include <intrin.h>
+#endif
+
 namespace antipodal::robust
 {
 using i64 = std::int64_t;
@@ -46,7 +50,26 @@ struct int128
     constexpr int128() = default;
     constexpr int128(std::int64_t v) : lo(std::uint64_t(v)), hi(v < 0 ? -1 : 0) {}
 
+    // Exact 64x64 -> 128-bit product.
+    // On MSVC this is the hardware multiply, which the speed of the 128-bit mode rests on.
     [[nodiscard]] static constexpr int128 mul(std::int64_t a, std::int64_t b)
+    {
+#if defined(_MSC_VER) && defined(_M_X64)
+        if (!std::is_constant_evaluated())
+        {
+            std::int64_t hi;
+            std::uint64_t const lo = std::uint64_t(_mul128(a, b, &hi));
+            return from_parts(lo, hi);
+        }
+#elif defined(_MSC_VER) && defined(_M_ARM64)
+        if (!std::is_constant_evaluated())
+            return from_parts(std::uint64_t(a) * std::uint64_t(b), __mulh(a, b));
+#endif
+        return mul_portable(a, b);
+    }
+
+    // Schoolbook multiply on 32-bit halves; public so tests can check mul() against it on every compiler.
+    [[nodiscard]] static constexpr int128 mul_portable(std::int64_t a, std::int64_t b)
     {
         bool const neg = (a < 0) != (b < 0);
         // works for INT64_MIN too
@@ -67,6 +90,14 @@ struct int128
         r.lo = (mid << 32) | (p00 & 0xFFFFFFFFu);
         r.hi = std::int64_t(p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32));
         return neg ? -r : r;
+    }
+
+    [[nodiscard]] static constexpr int128 from_parts(std::uint64_t lo, std::int64_t hi)
+    {
+        int128 r;
+        r.lo = lo;
+        r.hi = hi;
+        return r;
     }
 
     [[nodiscard]] friend constexpr int128 operator+(int128 a, int128 b)
