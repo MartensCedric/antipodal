@@ -48,7 +48,7 @@ namespace detail
 // The predicate's copy decides everything the count depends on: the in-triangle test and the front/back test.
 // The double copy only feeds Embree's bounding boxes.
 template <class C>
-struct robust_itriangle
+struct robust_ptriangle
 {
     vec3<C> pos0;
     vec3<C> pos1;
@@ -65,7 +65,7 @@ struct robust_dtriangle
 template <class C>
 struct robust_geom_data
 {
-    robust_itriangle<C> const* faces_iquant = nullptr;
+    robust_ptriangle<C> const* faces_pred = nullptr;
     robust_dtriangle const* faces_double = nullptr;
     std::size_t face_count = 0;
     double pad = 0.0; // world-space AABB slack; see robust_bounds_fn
@@ -130,7 +130,7 @@ void robust_occluded_fn(RTCOccludedFunctionNArguments const* args)
     auto* ctx = reinterpret_cast<robust_query_context<C>*>(args->context);
     auto const primID = args->primID;
 
-    auto const& ti = data->faces_iquant[primID];
+    auto const& ti = data->faces_pred[primID];
     auto const hit = robust::project_into_tri(ctx->qi, ti.pos0, ti.pos1, ti.pos2); // .sign == sign(n.x)
     if (hit.sign == 0)
         return; // query projects outside this triangle (or degenerate projection)
@@ -152,8 +152,12 @@ void robust_occluded_fn(RTCOccludedFunctionNArguments const* args)
  * Built once from the mesh's vertices/indices and its weighted boundary
  * segments (e.g. from `build_boundary_segments`). Holds non-owning spans into
  * the caller's vertex/index/boundary data only during construction; afterwards
- * it owns all quantized geometry and the Embree acceleration structure, so the
+ * it owns the predicates' geometry and the Embree acceleration structure, so the
  * caller's arrays need not outlive the evaluator.
+ *
+ * Mesh coordinates must fit in float under every policy: Embree culls with float
+ * boxes, and a triangle beyond float range is never reported. Queries may lie
+ * farther out; each policy states its own query range.
  *
  * Thread-safe for concurrent const queries (the batch helper shares one
  * evaluator across threads).
@@ -181,14 +185,14 @@ struct RobustMeshGwn
 
         // --- quantized + double geometry (1:1 by primID) ---
         auto const n_tris = indices.size() / 3;
-        m_faces_i.reserve(n_tris);
+        m_faces_pred.reserve(n_tris);
         m_faces_d.reserve(n_tris);
         for (std::size_t t = 0; t < n_tris; ++t)
         {
             auto const a = to_d(vertices[indices[3 * t + 0]]);
             auto const b = to_d(vertices[indices[3 * t + 1]]);
             auto const c = to_d(vertices[indices[3 * t + 2]]);
-            m_faces_i.push_back({quantize(a), quantize(b), quantize(c)});
+            m_faces_pred.push_back({quantize(a), quantize(b), quantize(c)});
             m_faces_d.push_back({a, b, c});
         }
 
@@ -223,7 +227,7 @@ struct RobustMeshGwn
     [[nodiscard]] static constexpr vec3<T> axis() { return {T(-1), T(0), T(0)}; }
 
     // Integer term — signed ray-crossing count along the fixed -x ray.
-    // Takes no direction: the robust ray is baked into the quantization.
+    // Takes no direction: the robust ray is baked into the predicates.
     // So, unlike the Intersector concept, it cannot honor an arbitrary per-query direction.
     [[nodiscard]] int signed_intersection_count(vec3<T> p) const
     {
@@ -257,7 +261,7 @@ struct RobustMeshGwn
     }
 
     // Fractional term — the robust Van Oosterom-Strackee boundary integral.
-    // The atan2 numerator is the exact integer atan2_num.
+    // The atan2 numerator is atan2_num, whose sign is exact under every policy.
     // Only the grazing (num == 0) branch consults the perturbed sign.
     // That sign is locked to the ray-triangle predicate above, so the two terms agree.
     [[nodiscard]] T fractional(vec3<T> p) const
@@ -349,31 +353,28 @@ private:
         }
     }
 
+    // Only the grid policies have a frame; exact_float keeps the defaults, center 0 and scale 1.
     void build_quantization(std::span<vec3<T> const> vertices)
     {
-        if (!robust::is_grid_policy<precision> || vertices.empty())
-        {
-            m_center = {};
-            m_scale = 1.0;
-            return;
-        }
-
-        auto mn = to_d(vertices[0]);
-        auto mx = mn;
-        for (auto const& v : vertices)
-        {
-            auto const d = to_d(v);
-            mn = {std::min(mn.x, d.x), std::min(mn.y, d.y), std::min(mn.z, d.z)};
-            mx = {std::max(mx.x, d.x), std::max(mx.y, d.y), std::max(mx.z, d.z)};
-        }
-
-        auto const ext = mx - mn;
-        m_center = mn + ext * 0.5;
-
-        double const half = 0.5 * std::max({ext.x, ext.y, ext.z});
-        // target a grid_bits magnitude so the 2x2 determinants cannot overflow
         if constexpr (robust::is_grid_policy<precision>)
         {
+            if (vertices.empty())
+                return;
+
+            auto mn = to_d(vertices[0]);
+            auto mx = mn;
+            for (auto const& v : vertices)
+            {
+                auto const d = to_d(v);
+                mn = {std::min(mn.x, d.x), std::min(mn.y, d.y), std::min(mn.z, d.z)};
+                mx = {std::max(mx.x, d.x), std::max(mx.y, d.y), std::max(mx.z, d.z)};
+            }
+
+            auto const ext = mx - mn;
+            m_center = mn + ext * 0.5;
+
+            // target a grid_bits magnitude so the 2x2 determinants cannot overflow
+            double const half = 0.5 * std::max({ext.x, ext.y, ext.z});
             constexpr double max_coord = double((robust::i64(1) << precision::grid_bits) - 1);
             m_scale = half > 0.0 ? max_coord / half : 1.0;
         }
@@ -381,9 +382,9 @@ private:
 
     void build_embree()
     {
-        m_geom_data.faces_iquant = m_faces_i.data();
+        m_geom_data.faces_pred = m_faces_pred.data();
         m_geom_data.faces_double = m_faces_d.data();
-        m_geom_data.face_count = m_faces_i.size();
+        m_geom_data.face_count = m_faces_pred.size();
         // Two quantization cells of AABB slack.
         // One cell covers the ~half-cell a counted query can sit outside the true triangle box.
         // (The predicate uses the quantized query, hence that slack.)
@@ -398,7 +399,7 @@ private:
         rtcSetSceneFlags(m_scene, RTC_SCENE_FLAG_ROBUST);
 
         auto geom = rtcNewGeometry(m_device, RTC_GEOMETRY_TYPE_USER);
-        rtcSetGeometryUserPrimitiveCount(geom, unsigned(m_faces_i.size()));
+        rtcSetGeometryUserPrimitiveCount(geom, unsigned(m_faces_pred.size()));
         rtcSetGeometryUserData(geom, &m_geom_data);
         rtcSetGeometryBoundsFunction(geom, detail::robust_bounds_fn<coord>, nullptr);
         rtcSetGeometryOccludedFunction(geom, detail::robust_occluded_fn<coord>);
@@ -417,7 +418,7 @@ private:
 
     dvec3 m_center{};
     double m_scale = 1.0;
-    std::vector<detail::robust_itriangle<coord>> m_faces_i;
+    std::vector<detail::robust_ptriangle<coord>> m_faces_pred;
     std::vector<detail::robust_dtriangle> m_faces_d;
     std::vector<qsegment> m_boundary;
     detail::robust_geom_data<coord> m_geom_data;

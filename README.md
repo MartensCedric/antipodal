@@ -56,7 +56,9 @@ void eval_gwnr_mesh_batch (Dispatcher&, Intersector const&,
 // Precision picks how the predicates are made exact; robust_predicates.hh has accuracy and cost per policy:
 //   robust::int64_grid   20-bit grid, ~1e-6 of the mesh size (default for float)
 //   robust::int128_grid  50-bit grid, ~double precision within ~500 mesh sizes
-//   robust::exact_float  no grid, exact signs on the doubles, full precision at any distance (default for double)
+//   robust::exact_float  no grid, exact signs on the doubles, ~1e-16 absolute at any distance (default for double)
+// Mesh coordinates must fit in float (Embree culls in float).
+// Robustness is not guaranteed under -ffast-math or /fp:fast: exact_float's exact signs rely on IEEE rounding.
 template <class T, class Precision = robust::default_precision<T>>
 struct RobustMeshGwn {                               // owns the predicates' geometry + BVH
     RobustMeshGwn(span<vec3<T> const> vertices, span<int const> indices,

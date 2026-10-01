@@ -2,14 +2,14 @@
 
 // Exact predicates for the unconditionally-robust mesh GWN (see gwn_mesh_robust.hh).
 //
-// We specialize on a ray pointing along a fixed coordinate axis (+x).
+// We specialize on a ray along a fixed coordinate axis, x; RobustMeshGwn casts it towards -x.
 // What matters is that one 2x2 determinant has an exact sign; the precision policies below differ in how.
 // int64_grid and int128_grid quantize the query and all geometry to integer coordinates (see the quantizer in
 // gwn_mesh_robust.hh), coarse enough that the determinant is exact in 64- or 128-bit integers.
 // exact_float keeps the doubles and computes the determinant's sign exactly, with an adaptive fallback.
 //
 // Convention (vec3 fields):
-//   .x    = depth, along the +x ray direction
+//   .x    = depth, along the ray's axis
 //   .y, .z = the 2D projection plane the ray is cast onto
 //
 // Symbolic perturbation of the query q_eps = q + (eps1 on x, eps2 on y, eps3 on z) with 0 < eps3 << eps2 << eps1.
@@ -166,8 +166,7 @@ using wide_t = std::conditional_t<std::is_floating_point_v<C>, double, std::cond
 template <class C>
 [[nodiscard]] constexpr wide_t<C> mul_wide(C a, C b)
 {
-    static_assert(std::is_same_v<C, std::int32_t> || std::is_same_v<C, std::int64_t>, "robust predicates support int32 "
-                                                                                      "or int64 coordinates");
+    static_assert(std::is_same_v<C, std::int32_t> || std::is_same_v<C, std::int64_t>, "int32 or int64 coordinates");
     if constexpr (std::is_same_v<wide_t<C>, int128>)
         return int128::mul(a, b);
     else
@@ -203,9 +202,12 @@ struct int128_grid
 // No grid: coordinates stay doubles, and each determinant's sign is computed exactly.
 // A double evaluation with a forward error bound decides almost every sign; only near-degenerate configurations fall
 // back to an exact expansion (Shewchuk's orient2d scheme).
-// Full double precision at any distance.
-// Coordinates must stay well inside the double range (magnitudes below ~1e150 and not subnormal-small), so products
-// neither overflow nor underflow; Embree's traversal threads run with flush-to-zero on.
+// About 1e-16 absolute at any distance.
+// Query coordinates must stay below ~1e150 in magnitude, so products do not overflow.
+// Nonzero coordinate differences must stay above ~1e-146, so products and their rounding errors stay normal doubles;
+// Embree's traversal threads run with flush-to-zero on.
+// Mesh coordinates are further bounded by float range, as for every policy (see RobustMeshGwn).
+// The exact fallback needs IEEE round-to-nearest without reassociation, so -ffast-math or /fp:fast void its exactness.
 // Costs about 1.4-2x int64_grid, about the same as int128_grid, with no far-field limit; the default for double.
 struct exact_float
 {
@@ -372,7 +374,7 @@ template <class C>
         return double(mul_wide<C>(a.y, b.y) + mul_wide<C>(a.z, b.z));
 }
 
-// Where the +x ray from q meets the projected triangle (q0,q1,q2), if it does.
+// Where the ray from q along the x axis meets the projected triangle (q0,q1,q2), if it does.
 // sign is the common edge sign (+1/-1 = orientation of the projected triangle) when q projects strictly or
 // symbolically inside, and 0 otherwise (outside, or a degenerate projection).
 // w0, w1, w2 are then the unnormalized barycentric weights of q0, q1, q2: each has the same sign as `sign` or is 0,
@@ -399,9 +401,8 @@ template <class C>
     return {e01, double(edge_det(q, q1, q2)), double(edge_det(q, q2, q0)), double(edge_det(q, q0, q1))};
 }
 
-// In-projected-triangle test for the +x ray from q against quantized triangle (q0,q1,q2).
-// Returns project_into_tri(...).sign.
-// This is the signed contribution the integer part adds if the hit is in front (positive depth).
+// In-projected-triangle test for the ray from q along the x axis against the predicate's triangle (q0,q1,q2).
+// Returns project_into_tri(...).sign, which is sign(n.x); a hit in front adds its negation to the -x ray's count.
 template <class C>
 [[nodiscard]] inline int inside_tri_sign(vec3<C> q, vec3<C> q0, vec3<C> q1, vec3<C> q2)
 {
