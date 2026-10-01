@@ -67,10 +67,11 @@ if(ANTIPODAL_BUILD_TESTS AND PROJECT_IS_TOP_LEVEL)
 
     # The OpenGL test spins up a headless context via gl_headless_context.hh,
     # which needs platform GL/EGL libraries linked into the test executable.
+    # macOS has no headless backend (the context helper is a stub there), so nothing to link.
     if(ANTIPODAL_WITH_OPENGL)
         if(WIN32)
             target_link_libraries(antipodal-tests PRIVATE opengl32 gdi32 user32)
-        elseif(UNIX)
+        elseif(UNIX AND NOT APPLE)
             find_package(OpenGL REQUIRED)
             find_library(ANTIPODAL_EGL_LIB EGL REQUIRED)
             target_link_libraries(antipodal-tests PRIVATE OpenGL::GL ${ANTIPODAL_EGL_LIB})

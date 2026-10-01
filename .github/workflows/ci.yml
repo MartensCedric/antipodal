@@ -1,0 +1,150 @@
+name: CI
+
+# Wide-but-shallow build + test matrix (one config per platform/compiler), plus the
+# two Linux clang jobs that go deeper: Debug with ASan/UBSan, and Release with Mesa's
+# software rasterizer (llvmpipe) so the OpenGL compute path actually runs instead of
+# skipping on a GPU-less runner. A separate cheap job checks formatting and that the
+# ANTIPODAL_HAS_* gating compiles with every optional dependency off.
+#
+# Everything builds through build.py with an explicit preset; dependencies (tbb,
+# embree, stb) come from a pinned vcpkg checkout with a per-job binary cache, since
+# embree from source dominates a cold build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Bump deliberately: it decides the tbb/embree/stb versions and keys the binary cache.
+  VCPKG_COMMIT: 73248d88e09d43dfd7836902462a64fd2a43387b
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg-ci
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-bincache,readwrite
+  VCPKG_DISABLE_METRICS: "1"
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux Clang Debug ASan+UBSan
+            os: ubuntu-26.04
+            preset: x64-linux-clang-ninja-asan
+          - name: Linux Clang Release + llvmpipe
+            os: ubuntu-26.04
+            preset: x64-linux-clang-ninja-release
+            mesa: true
+          - name: Linux GCC
+            os: ubuntu-26.04
+            preset: x64-linux-gcc-ninja-relwithdebinfo
+          - name: Linux ARM Clang
+            os: ubuntu-26.04-arm
+            preset: arm64-linux-clang-ninja-relwithdebinfo
+            # vcpkg ships no prebuilt cmake/ninja for arm64 Linux; use the runner's.
+            vcpkg-system-binaries: "1"
+          - name: Windows MSVC
+            os: windows-2025
+            preset: x64-windows-msvc-ninja-relwithdebinfo
+          - name: Windows clang-cl
+            os: windows-2025
+            preset: x64-windows-clang-ninja-relwithdebinfo
+          - name: macOS AppleClang
+            os: macos-latest
+            preset: arm64-macos-clang-ninja-relwithdebinfo
+    defaults:
+      run:
+        shell: bash
+    env:
+      VCPKG_FORCE_SYSTEM_BINARIES: ${{ matrix.vcpkg-system-binaries }}
+      # Mesa picks X11/Wayland otherwise and fails on a headless runner.
+      EGL_PLATFORM: surfaceless
+      UBSAN_OPTIONS: print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # GL + EGL headers/libs are needed to link the OpenGL test. Without a Mesa
+      # driver, EGL finds no display and the test skips; with it, llvmpipe runs it.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libgl-dev libegl-dev \
+            ${{ matrix.mesa && 'libegl-mesa0 libgl1-mesa-dri' || '' }}
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # The image does not reliably put LLVM's bin on PATH, and the preset names a bare clang-cl.
+      - name: Put LLVM on PATH
+        if: contains(matrix.preset, 'windows-clang')
+        shell: pwsh
+        run: |
+          $llvm = "$env:ProgramFiles\LLVM\bin"
+          if (-not (Test-Path "$llvm\clang-cl.exe")) { throw "no clang-cl.exe under $llvm - the image moved LLVM" }
+          Add-Content $env:GITHUB_PATH $llvm
+
+      - name: Set up vcpkg
+        run: |
+          git init -q vcpkg-ci
+          git -C vcpkg-ci fetch -q --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_COMMIT"
+          git -C vcpkg-ci checkout -q FETCH_HEAD
+          if [ "$RUNNER_OS" = Windows ]; then ./vcpkg-ci/bootstrap-vcpkg.bat -disableMetrics; else ./vcpkg-ci/bootstrap-vcpkg.sh -disableMetrics; fi
+          mkdir -p vcpkg-bincache
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: vcpkg-bincache
+          key: vcpkg-${{ matrix.preset }}-${{ runner.arch }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ matrix.preset }}-${{ runner.arch }}-${{ env.VCPKG_COMMIT }}-
+
+      - name: Build
+        run: python build.py --preset ${{ matrix.preset }} --vcpkg-toolchain "$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      # Saved even when the build or tests fail, so a red run does not cost the next one the embree rebuild.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: vcpkg-bincache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
+
+  format-and-nodeps:
+    name: Format + no optional deps
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: clang-format check
+        run: uv run script/run-clang-format.py --check
+
+      # TBB, Embree, OpenGL and the examples off: no vcpkg, just the compiler.
+      - name: Build
+        run: uv run build.py --preset x64-linux-clang-ninja-nodeps --no-vcpkg
+
+      - name: Test
+        run: ctest --test-dir build/x64-linux-clang-ninja-nodeps --output-on-failure

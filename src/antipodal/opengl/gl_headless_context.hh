@@ -6,8 +6,9 @@
 //   - Windows: a hidden-window WGL context (works out of the box).
 //   - Linux:   an EGL surfaceless / pbuffer context (install the EGL dev package, e.g. `libegl1-mesa-dev`; nothing is bundled here).
 //
-// `HeadlessGlContext::create()` returns `nullptr` when no context can be made (no GPU, no driver), so callers such as the test suite can skip gracefully.
-// The caller links the platform libs: Windows needs `opengl32 gdi32 user32`, Linux needs the GL and EGL libraries.
+// `HeadlessGlContext::create()` returns `nullptr` when no context can be made (no GPU, no driver), so callers such as
+// the test suite can skip gracefully. The caller links the platform libs: Windows needs `opengl32 gdi32 user32`, Linux
+// needs the GL and EGL libraries.
 //
 // Gated on `ANTIPODAL_HAS_OPENGL`; a no-op without it.
 
