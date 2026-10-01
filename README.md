@@ -53,14 +53,17 @@ void eval_gwnr_mesh_batch (Dispatcher&, Intersector const&,
 // Prepared object, built once from the mesh.
 // Bakes a fixed axis-aligned ray; takes no x0.
 // Requires Embree. See gwn_mesh_robust.hh.
-struct RobustMeshGwn<T> {                            // owns quantized geometry + BVH
+// Bits = 128 quantizes on a 50-bit grid instead of 20 bits, for about double precision.
+// Queries are roughly 2x slower, more without native __int128 (e.g. MSVC).
+template <class T, int Bits = 64>
+struct RobustMeshGwn {                               // owns quantized geometry + BVH
     RobustMeshGwn(span<vec3<T> const> vertices, span<int const> indices,
                   span<weighted_segment3<T> const> boundary);
     T   eval(vec3<T> p) const;                       // full robust GWN
     T   fractional(vec3<T> p) const;                 // boundary term only
     int signed_intersection_count(vec3<T> p) const;  // integer term (no dir: ray is baked in)
 };
-void eval_gwnr_mesh_batch_robust(Dispatcher&, RobustMeshGwn<T> const&,
+void eval_gwnr_mesh_batch_robust(Dispatcher&, RobustMeshGwn<T, Bits> const&,
                                  span<vec3<T> const> positions, span<T> out_wnrs);
 
 // Helpers (common.hh): build the open-boundary edge list from a triangle mesh
