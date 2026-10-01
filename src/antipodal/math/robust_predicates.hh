@@ -11,7 +11,7 @@
 //   .y, .z = the 2D projection plane the ray is cast onto
 //
 // Symbolic perturbation of the query q_eps = q + (eps1 on x, eps2 on y, eps3 on z) with 0 < eps3 << eps2 << eps1.
-// eps1 (depth) only matters for the front/back (supporting-plane) test, and is handled in double there.
+// eps1 (depth) only matters for the front/back test, where a hit exactly at the query's depth counts as in front.
 // The in-plane / atan2-numerator discontinuity is governed exactly by the 2x2 determinant of the projected edge.
 // It is evaluated with the lexicographic (eps2, eps3) tie-break below.
 //
@@ -192,6 +192,14 @@ struct precision<128>
     static constexpr int grid_bits = 50;
 };
 
+// The 2x2 determinant of (q - q0) and (q1 - q0) in the (y,z) plane, exactly.
+// Its sign says which side of the directed projected edge (q0 -> q1) the query lies on; 0 means on the edge's line.
+template <class C>
+[[nodiscard]] inline wide_t<C> edge_det(vec3<C> q, vec3<C> q0, vec3<C> q1)
+{
+    return mul_wide<C>(q.y - q0.y, q0.z - q1.z) + mul_wide<C>(q.z - q0.z, q1.y - q0.y);
+}
+
 // Signed side of the directed projected edge (q0 -> q1) that the query q lies on.
 // Returns +1 / -1 via the exact real determinant.
 // On the exact-zero (grazing) case the lexicographic perturbation (eps2 on y dominating eps3 on z) decides.
@@ -199,9 +207,7 @@ struct precision<128>
 template <class C>
 [[nodiscard]] inline int edge_sign(vec3<C> q, vec3<C> q0, vec3<C> q1)
 {
-    // real part: 2x2 determinant of (q - q0) and (q1 - q0) in the (y,z) plane
-    wide_t<C> const t_real = mul_wide<C>(q.y - q0.y, q0.z - q1.z) //
-                           + mul_wide<C>(q.z - q0.z, q1.y - q0.y);
+    wide_t<C> const t_real = edge_det(q, q0, q1);
     if (t_real != 0)
         return t_real > 0 ? 1 : -1;
 
@@ -237,20 +243,39 @@ template <class C>
     return -edge_sign(q, q0, q1);
 }
 
-// In-projected-triangle test for the +x ray from q against quantized triangle (q0,q1,q2).
-// Returns the common edge sign (+1/-1 = sign of the projected signed area = orientation) when q projects inside.
-// "inside" here means strictly or symbolically inside; otherwise returns 0 (outside or degenerate).
-// This is the signed contribution the integer part adds if the hit is in front (positive depth).
+// Where the +x ray from q meets the projected triangle (q0,q1,q2), if it does.
+// sign is the common edge sign (+1/-1 = orientation of the projected triangle) when q projects strictly or
+// symbolically inside, and 0 otherwise (outside, or a degenerate projection).
+// w0, w1, w2 are then the unnormalized barycentric weights of q0, q1, q2: each has the same sign as `sign` or is 0,
+// and their sum is twice the projected area, which is not 0.
+struct tri_projection
+{
+    int sign = 0;
+    double w0 = 0.0;
+    double w1 = 0.0;
+    double w2 = 0.0;
+};
+
 template <class C>
-[[nodiscard]] inline int inside_tri_sign(vec3<C> q, vec3<C> q0, vec3<C> q1, vec3<C> q2)
+[[nodiscard]] inline tri_projection project_into_tri(vec3<C> q, vec3<C> q0, vec3<C> q1, vec3<C> q2)
 {
     int const e01 = edge_sign(q, q0, q1);
     int const e12 = edge_sign(q, q1, q2);
     int const e20 = edge_sign(q, q2, q0);
 
-    if (e01 != 0 && e01 == e12 && e01 == e20)
-        return e01;
+    if (e01 == 0 || e01 != e12 || e01 != e20)
+        return {};
 
-    return 0;
+    // the weight of a vertex is the determinant of the edge opposite it
+    return {e01, double(edge_det(q, q1, q2)), double(edge_det(q, q2, q0)), double(edge_det(q, q0, q1))};
+}
+
+// In-projected-triangle test for the +x ray from q against quantized triangle (q0,q1,q2).
+// Returns project_into_tri(...).sign.
+// This is the signed contribution the integer part adds if the hit is in front (positive depth).
+template <class C>
+[[nodiscard]] inline int inside_tri_sign(vec3<C> q, vec3<C> q0, vec3<C> q1, vec3<C> q2)
+{
+    return project_into_tri(q, q0, q1, q2).sign;
 }
 } // namespace antipodal::robust

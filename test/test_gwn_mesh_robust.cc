@@ -348,4 +348,39 @@ TEST_CASE_TEMPLATE("RobustMeshGwn: far away queries", Cfg, d64, d128)
     }
 }
 
+// A closed tetrahedron whose face abc contains the x direction: its (y,z) projection is a segment in double,
+// but rounding onto the grid makes it a thin sliver, so the in-triangle test can accept a query near that line.
+// The front/back test must then agree with it; it used to divide by the double normal's x, which is exactly 0 here.
+// Every query is in front of the whole tetrahedron (x = 5), so the count must be 0.
+TEST_CASE_TEMPLATE("RobustMeshGwn: face parallel to the ray, queries in its plane", Cfg, d64, d128)
+{
+    using namespace antipodal;
+
+    vec3<double> const a{0, 0.4303914952519497, 0.64558724287792457};
+    vec3<double> const b{1, 0.68425246596985911, 1.0263786989547887};
+    vec3<double> const c{0.29999999999999999, 0.19952205828266512, 0.29928308742399767};
+    vec3<double> const d{0.5, 0.83805533983482472, 0.25708300975223697};
+    REQUIRE(cross(b - a, c - a).x == 0.0); // the precondition this test is about
+
+    std::vector<vec3<double>> const verts = {a, b, c, d};
+    std::vector<int> const idx = {0, 1, 2, 0, 3, 1, 1, 3, 2, 2, 3, 0};
+    std::vector<weighted_segment3<double>> const no_boundary;
+    RobustMeshGwn<double, Cfg::bits> const robust{verts, idx, no_boundary};
+
+    // the query that used to count 1 at 128 bits
+    vec3<double> const q{5, 0.20194571032110109, 0.30291856548165164};
+    CHECK(robust.signed_intersection_count(q) == 0);
+
+    // the wall's line is z = 1.5 y; sweep along it, and just off it within a 64-bit grid cell
+    for (int i = 0; i <= 200; ++i)
+    {
+        double const y = c.y + (b.y - c.y) * (i / 200.0);
+        for (double const off : {0.0, 3e-7, -3e-7})
+        {
+            vec3<double> const p{5, y + off, 1.5 * y - off};
+            CHECK(robust.signed_intersection_count(p) == 0);
+        }
+    }
+}
+
 #endif // ANTIPODAL_HAS_EMBREE

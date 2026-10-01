@@ -43,8 +43,8 @@ namespace antipodal
 namespace detail
 {
 // Quantized (integer) and double copies of a triangle, 1:1 by primID.
-// The integer copy drives the exact in-triangle predicate.
-// The double copy drives the (non-critical) front/back depth test.
+// The integer copy decides everything the count depends on: the in-triangle test and the front/back test.
+// The double copy only feeds Embree's bounding boxes.
 template <class C>
 struct robust_itriangle
 {
@@ -69,15 +69,13 @@ struct robust_geom_data
     double pad = 0.0; // world-space AABB slack; see robust_bounds_fn
 };
 
-// Ray-query context carrying the exact (quantized) query and the double query,
-// plus the accumulated signed intersection count.
+// Ray-query context carrying the exact (quantized) query, plus the accumulated signed intersection count.
 template <class C>
 struct robust_query_context
 {
     RTCRayQueryContext base; // MUST be first for the reinterpret_cast below
     int sum;
     vec3<C> qi; // quantized query (.x depth, (.y,.z) projection)
-    dvec3 qd;   // double query (for the front/back depth test)
 };
 
 // User-geometry bounds: the float AABB of the triangle, grown for two reasons.
@@ -116,7 +114,7 @@ void robust_bounds_fn(RTCBoundsFunctionArguments const* args)
 }
 
 // Custom robust intersection for the -x ray.
-// First the exact in-triangle predicate in the (y,z) projection, then a double front/back test.
+// First the exact in-triangle predicate in the (y,z) projection, then the front/back test on the same quantized triangle.
 // The ray direction is -x and the fractional part uses north pole N = +x = -dir (antipodal method).
 // The integer sign is sign(dir . n) = -sign(n.x).
 // Never reports occlusion, so traversal visits every candidate.
@@ -131,17 +129,18 @@ void robust_occluded_fn(RTCOccludedFunctionNArguments const* args)
     auto const primID = args->primID;
 
     auto const& ti = data->faces_iquant[primID];
-    int const s = robust::inside_tri_sign(ctx->qi, ti.pos0, ti.pos1, ti.pos2); // == sign(n.x)
-    if (s == 0)
+    auto const hit = robust::project_into_tri(ctx->qi, ti.pos0, ti.pos1, ti.pos2); // .sign == sign(n.x)
+    if (hit.sign == 0)
         return; // query projects outside this triangle (or degenerate projection)
 
-    // depth test in double: ray q + t*(-x) hits the supporting plane at t > 0 iff the tri is in front.
-    // s != 0 => n.x != 0, so the division is safe.
-    auto const& td = data->faces_double[primID];
-    auto const n = cross(td.pos1 - td.pos0, td.pos2 - td.pos0);
-    double const t = dot(n, td.pos0 - ctx->qd) / (-n.x); // ray dir = -x
-    if (t > 0)
-        ctx->sum += -s; // sign(dir . n), dir = -x
+    // The ray meets the quantized triangle at the barycentric mix of its vertices' depths.
+    // That always lies between them, so the front/back answer cannot contradict the in-triangle test,
+    // however close to parallel to the ray the triangle is.
+    // Rounding in double only matters for a query within rounding of the triangle, where the GWN jumps anyway.
+    double const hit_x = (hit.w0 * double(ti.pos0.x) + hit.w1 * double(ti.pos1.x) + hit.w2 * double(ti.pos2.x))
+                       / (hit.w0 + hit.w1 + hit.w2);
+    if (double(ctx->qi.x) >= hit_x) // ray dir = -x; a tie is in front under the eps1 perturbation
+        ctx->sum += -hit.sign;      // sign(dir . n), dir = -x
 }
 } // namespace detail
 
@@ -233,8 +232,7 @@ struct RobustMeshGwn
         detail::robust_query_context<coord> q;
         rtcInitRayQueryContext(&q.base);
         q.sum = 0;
-        q.qd = to_d(p);
-        q.qi = quantize(q.qd);
+        q.qi = quantize(to_d(p));
 
         RTCRay ray{};
         ray.org_x = float(p.x);
