@@ -48,22 +48,24 @@ void eval_gwnr_mesh_batch (Dispatcher&, Intersector const&,
                            vec3<T> x0,
                            span<weighted_segment3<T> const> boundary);
 
-// Robust full GWN — exact integer predicates keep the integer and fractional terms in agreement.
+// Robust full GWN — exact predicates keep the integer and fractional terms in agreement.
 // No spurious ±1 near the surface.
 // Prepared object, built once from the mesh.
 // Bakes a fixed axis-aligned ray; takes no x0.
 // Requires Embree. See gwn_mesh_robust.hh.
-// Bits = 128 quantizes on a 50-bit grid instead of 20 bits, for about double precision.
-// Queries are roughly 2x slower, more without native __int128 (e.g. MSVC).
-template <class T, int Bits = 64>
-struct RobustMeshGwn {                               // owns quantized geometry + BVH
+// Precision picks how the predicates are made exact; robust_predicates.hh has accuracy and cost per policy:
+//   robust::int64_grid   20-bit grid, ~1e-6 of the mesh size (default for float)
+//   robust::int128_grid  50-bit grid, ~double precision within ~500 mesh sizes
+//   robust::exact_float  no grid, exact signs on the doubles, full precision at any distance (default for double)
+template <class T, class Precision = robust::default_precision<T>>
+struct RobustMeshGwn {                               // owns the predicates' geometry + BVH
     RobustMeshGwn(span<vec3<T> const> vertices, span<int const> indices,
                   span<weighted_segment3<T> const> boundary);
     T   eval(vec3<T> p) const;                       // full robust GWN
     T   fractional(vec3<T> p) const;                 // boundary term only
     int signed_intersection_count(vec3<T> p) const;  // integer term (no dir: ray is baked in)
 };
-void eval_gwnr_mesh_batch_robust(Dispatcher&, RobustMeshGwn<T, Bits> const&,
+void eval_gwnr_mesh_batch_robust(Dispatcher&, RobustMeshGwn<T, Precision> const&,
                                  span<vec3<T> const> positions, span<T> out_wnrs);
 
 // Helpers (common.hh): build the open-boundary edge list from a triangle mesh

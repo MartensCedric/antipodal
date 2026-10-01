@@ -1,12 +1,14 @@
 #pragma once
 
-// Exact integer predicates for the unconditionally-robust mesh GWN (see gwn_mesh_robust.hh).
+// Exact predicates for the unconditionally-robust mesh GWN (see gwn_mesh_robust.hh).
 //
 // We specialize on a ray pointing along a fixed coordinate axis (+x).
-// The query and all geometry are quantized to integer coordinates (see the quantizer in gwn_mesh_robust.hh).
-// That keeps the relevant 2x2 determinant exact in 64-bit integers, or in 128-bit integers for the 128-bit option.
+// What matters is that one 2x2 determinant has an exact sign; the precision policies below differ in how.
+// int64_grid and int128_grid quantize the query and all geometry to integer coordinates (see the quantizer in
+// gwn_mesh_robust.hh), coarse enough that the determinant is exact in 64- or 128-bit integers.
+// exact_float keeps the doubles and computes the determinant's sign exactly, with an adaptive fallback.
 //
-// Convention (ivec3 fields):
+// Convention (vec3 fields):
 //   .x    = depth, along the +x ray direction
 //   .y, .z = the 2D projection plane the ray is cast onto
 //
@@ -24,12 +26,15 @@
 // So the edge-classification predicate and the atan2 numerator are the same determinant up to sign.
 // (The edge predicate is "which side of the projected edge the query is on", used by the integer test.)
 // Both share the discontinuity.
-// As long as the sign is evaluated by the same integer code on both sides, the integer jump and the atan2 jump cancel.
+// As long as the sign is evaluated by the same exact code on both sides, the integer jump and the atan2 jump cancel.
 
 #include <antipodal/math/common.hh>
 
+#include <algorithm>
+#include <cmath>
 #include <compare>
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_ARM64))
@@ -146,58 +151,158 @@ __extension__ typedef __int128 i128; // __extension__ silences -Wpedantic
 using i128 = int128;
 #endif
 
-// Quantized integer point.
-// Coordinates are kept to ~20 bits by the quantizer, so the 2x2 determinants below never overflow i64.
+// Quantized integer point of int64_grid.
+// Mesh coordinates are kept to 20 bits and queries are clamped to 30 bits (see RobustMeshGwn::quantize),
+// so a determinant term stays below 2^61 and never overflows i64.
 using ivec3 = vec3<std::int32_t>;
 
-// Same for the 128-bit option, with 50-bit coordinates and i128 determinants.
+// Same for int128_grid: 50-bit mesh coordinates, queries clamped to 60 bits, terms below 2^121 in i128.
 using lvec3 = vec3<std::int64_t>;
 
-// Integer wide enough for an exact 2x2 determinant of C coordinates.
+// Type of edge_det for C coordinates: an integer wide enough to be exact, or a double whose sign is exact.
 template <class C>
-using wide_t = std::conditional_t<sizeof(C) == 4, i64, i128>;
+using wide_t = std::conditional_t<std::is_floating_point_v<C>, double, std::conditional_t<sizeof(C) == 4, i64, i128>>;
 
 template <class C>
 [[nodiscard]] constexpr wide_t<C> mul_wide(C a, C b)
 {
-    static_assert(std::is_same_v<C, std::int32_t> || std::is_same_v<C, std::int64_t>,
-                  "robust predicates support int32 or int64 coordinates");
+    static_assert(std::is_same_v<C, std::int32_t> || std::is_same_v<C, std::int64_t>, "robust predicates support int32 "
+                                                                                      "or int64 coordinates");
     if constexpr (std::is_same_v<wide_t<C>, int128>)
         return int128::mul(a, b);
     else
         return wide_t<C>(a) * wide_t<C>(b);
 }
 
-// Quantization grid used by RobustMeshGwn<T, Bits>.
-// Queries further than about 500 mesh sizes away are clamped to that distance before rounding
-// (see RobustMeshGwn::quantize), so the determinants cannot overflow.
-// 50 bits already matches double precision, so a finer grid would not help.
-template <int Bits>
-struct precision
-{
-    static_assert(Bits == 64 || Bits == 128, "robust precision must be 64 or 128 bits");
-};
+// --- precision policies ---------------------------------------------------------------------------------------------
+//
+// The second template argument of RobustMeshGwn: how the shared determinant is made exact.
+// Each cost is per query relative to int64_grid, measured on MSVC x64 (16k-triangle closed sphere, 8k-triangle open
+// hemisphere, 20k random queries).
 
-template <>
-struct precision<64>
+// 20-bit grid, 64-bit integer determinants.
+// Accurate to about 1e-6 of the mesh size: a query within a few grid cells of the surface can snap across it.
+// Queries further than about 500 mesh sizes are clamped to that distance, which costs up to ~1.5e-7 absolute.
+// The fastest; the default for float.
+struct int64_grid
 {
     using coord = std::int32_t;
     static constexpr int grid_bits = 20;
 };
 
-template <>
-struct precision<128>
+// 50-bit grid, 128-bit integer determinants.
+// About double precision within ~500 mesh sizes; beyond, queries are clamped as for int64_grid.
+// 50 bits already matches double precision, so a finer grid would not help.
+// Costs about 1.8-1.9x int64_grid.
+struct int128_grid
 {
     using coord = std::int64_t;
     static constexpr int grid_bits = 50;
 };
 
-// The 2x2 determinant of (q - q0) and (q1 - q0) in the (y,z) plane, exactly.
+// No grid: coordinates stay doubles, and each determinant's sign is computed exactly.
+// A double evaluation with a forward error bound decides almost every sign; only near-degenerate configurations fall
+// back to an exact expansion (Shewchuk's orient2d scheme).
+// Full double precision at any distance.
+// Coordinates must stay well inside the double range (magnitudes below ~1e150 and not subnormal-small), so products
+// neither overflow nor underflow; Embree's traversal threads run with flush-to-zero on.
+// Costs about 1.4-2x int64_grid, about the same as int128_grid, with no far-field limit; the default for double.
+struct exact_float
+{
+    using coord = double;
+};
+
+template <class P>
+inline constexpr bool is_grid_policy = !std::is_floating_point_v<typename P::coord>;
+
+template <class T>
+using default_precision = std::conditional_t<std::is_same_v<T, float>, int64_grid, exact_float>;
+
+// --- exact sign of a double determinant -----------------------------------------------------------------------------
+namespace detail
+{
+// x + y == a + b exactly (Knuth's two-sum; needs IEEE round-to-nearest and no fast-math reassociation).
+inline void two_sum(double a, double b, double& x, double& y)
+{
+    x = a + b;
+    double const bv = x - a;
+    double const av = x - bv;
+    y = (a - av) + (b - bv);
+}
+
+// Exact sign of the sum of the six products a[i] * b[i].
+// Each product splits exactly into p + e with fma, and the twelve parts are summed as a nonoverlapping expansion.
+// The sign of such an expansion is the sign of its largest component, which is its last nonzero one.
+inline int exact_sign_of_products(double const (&a)[6], double const (&b)[6])
+{
+    double e[12];
+    int n = 0;
+    auto const grow = [&](double v)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            double sum;
+            double err;
+            two_sum(v, e[i], sum, err);
+            e[i] = err;
+            v = sum;
+        }
+        e[n++] = v;
+    };
+    for (int i = 0; i < 6; ++i)
+    {
+        double const p = a[i] * b[i];
+        grow(std::fma(a[i], b[i], -p));
+        grow(p);
+    }
+    for (int i = n - 1; i >= 0; --i)
+        if (e[i] != 0)
+            return e[i] > 0 ? 1 : -1;
+    return 0;
+}
+} // namespace detail
+
+// The 2x2 determinant of (q - q0) and (q1 - q0) in the (y,z) plane.
 // Its sign says which side of the directed projected edge (q0 -> q1) the query lies on; 0 means on the edge's line.
+// Integer coordinates: the exact value.
+// Double coordinates: the sign is exact, and the magnitude is the double estimate, kept at least DBL_MIN when the exact
+// value is not 0, so that `!= 0` and `> 0` read the exact sign.
 template <class C>
 [[nodiscard]] inline wide_t<C> edge_det(vec3<C> q, vec3<C> q0, vec3<C> q1)
 {
-    return mul_wide<C>(q.y - q0.y, q0.z - q1.z) + mul_wide<C>(q.z - q0.z, q1.y - q0.y);
+    if constexpr (std::is_floating_point_v<C>)
+    {
+        static_assert(std::is_same_v<C, double>, "exact_float works on double coordinates");
+        double const p1 = (q.y - q0.y) * (q0.z - q1.z);
+        double const p2 = (q.z - q0.z) * (q1.y - q0.y);
+        double const det = p1 + p2;
+
+        // Shewchuk's orient2d error bound for this form
+        constexpr double eps = std::numeric_limits<double>::epsilon() / 2;
+        constexpr double err_bound = (3.0 + 16.0 * eps) * eps;
+        double const magnitude = std::abs(p1) + std::abs(p2);
+        if (std::abs(det) > err_bound * magnitude)
+            return det;
+
+        // Both products are exactly 0 only if a difference is: a rounded difference is 0 only for equal inputs,
+        // and a product of nonzero doubles only underflows outside the precondition.
+        // A degenerate edge lands here on every call, so it must not reach the expansion.
+        if (magnitude == 0)
+            return 0.0;
+
+        // expanded into raw coordinates, so no rounded difference is involved:
+        // det = qy*q0z - qy*q1z + q0y*q1z + qz*q1y - qz*q0y - q0z*q1y
+        double const a[6] = {q.y, -q.y, q0.y, q.z, -q.z, -q0.z};
+        double const b[6] = {q0.z, q1.z, q1.z, q1.y, q0.y, q1.y};
+        int const sign = detail::exact_sign_of_products(a, b);
+        if (sign == 0)
+            return 0.0;
+        return std::copysign(std::max(std::abs(det), std::numeric_limits<double>::min()), double(sign));
+    }
+    else
+    {
+        return mul_wide<C>(q.y - q0.y, q0.z - q1.z) + mul_wide<C>(q.z - q0.z, q1.y - q0.y);
+    }
 }
 
 // Signed side of the directed projected edge (q0 -> q1) that the query q lies on.
@@ -223,15 +328,29 @@ template <class C>
     return 0;
 }
 
-// Exact (perturbed) numerator value of the spherical-area atan2 for the edge (q0 -> q1) seen from query q.
-// Equals -t_real, so it can be large; returned as wide_t<C>.
+// Numerator of the spherical-area atan2 for the edge (q0 -> q1) seen from query q.
+// It equals -t_real, and its sign is exact: exactly 0 iff t_real is.
 // Use sign_num_perturbed() to resolve the num==0 grazing case consistently.
+// For double coordinates the magnitude is computed from the query-relative vectors, not from edge_det:
+// as the query approaches the ray through a vertex, that vertex's (y,z) offset gets small, and only differences taken
+// from the query keep it to full relative precision; the neighbouring edges' atan2 terms then still cancel.
 template <class C>
 [[nodiscard]] inline wide_t<C> atan2_num(vec3<C> q, vec3<C> q0, vec3<C> q1)
 {
     auto const v0 = q0 - q;
     auto const v1 = q1 - q;
-    return mul_wide<C>(v0.z, v1.y) - mul_wide<C>(v0.y, v1.z);
+    if constexpr (std::is_floating_point_v<C>)
+    {
+        double const t_real = edge_det(q, q0, q1);
+        if (t_real == 0)
+            return 0.0;
+        double const num = v0.z * v1.y - v0.y * v1.z;
+        return std::copysign(std::max(std::abs(num), std::numeric_limits<double>::min()), -t_real);
+    }
+    else
+    {
+        return mul_wide<C>(v0.z, v1.y) - mul_wide<C>(v0.y, v1.z);
+    }
 }
 
 // The perturbed sign of atan2_num when it is exactly zero.
@@ -241,6 +360,16 @@ template <class C>
 [[nodiscard]] inline int sign_num_perturbed(vec3<C> q, vec3<C> q0, vec3<C> q1)
 {
     return -edge_sign(q, q0, q1);
+}
+
+// a.y * b.y + a.z * b.z; exact for integer coordinates up to the final conversion to double.
+template <class C>
+[[nodiscard]] inline double dot_yz(vec3<C> a, vec3<C> b)
+{
+    if constexpr (std::is_floating_point_v<C>)
+        return a.y * b.y + a.z * b.z;
+    else
+        return double(mul_wide<C>(a.y, b.y) + mul_wide<C>(a.z, b.z));
 }
 
 // Where the +x ray from q meets the projected triangle (q0,q1,q2), if it does.
