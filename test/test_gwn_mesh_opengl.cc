@@ -4,9 +4,9 @@
 
 #include <antipodal/dispatcher/dispatcher.hh>
 #include <antipodal/gwn_mesh.hh>
+#include <antipodal/gwn_mesh_opengl.hh>
 #include <antipodal/intersector/intersector.hh>
 #include <antipodal/math/common.hh>
-#include <antipodal/gwn_mesh_opengl.hh>
 #include <antipodal/opengl/gl_headless_context.hh>
 
 #include <cmath>
@@ -92,8 +92,8 @@ float point_tri_dist_sqr(fvec3 p, fvec3 a, fvec3 b, fvec3 c)
 }
 
 // True when `p` is within `skin` of the mesh surface (any triangle, including edges and the open rim).
-// There the GPU rasterization and the exact CPU ray cast may legitimately disagree by a full ±1 in the integer term (the crossing is snapped to a grid cell).
-// Those cells are excluded from the check.
+// There the GPU rasterization and the exact CPU ray cast may legitimately disagree by a full ±1 in the integer term
+// (the crossing is snapped to a grid cell). Those cells are excluded from the check.
 bool near_mesh_surface(fvec3 p, std::vector<fvec3> const& verts, std::vector<int> const& idx, float skin)
 {
     float const skin2 = skin * skin;
@@ -104,8 +104,9 @@ bool near_mesh_surface(fvec3 p, std::vector<fvec3> const& verts, std::vector<int
 }
 
 // A fixed right-handed orthonormal frame, generically rotated off the axes.
-// The grid is laid out along this frame so integration rays do not align with the cube's axis-aligned faces / shared face diagonals.
-// That alignment makes the rasterizer double-count along shared triangle edges, which is exactly why the repo's demo mesh is a *rotated* cube.
+// The grid is laid out along this frame so integration rays do not align with the cube's axis-aligned faces / shared
+// face diagonals. That alignment makes the rasterizer double-count along shared triangle edges, which is exactly why
+// the repo's demo mesh is a *rotated* cube.
 struct Basis
 {
     fvec3 ex;
@@ -168,8 +169,9 @@ TEST_CASE("OpenGLMeshGwn: dense grid roughly matches the Embree+TBB float CPU pa
         gpu.eval_grid(start, dx, dy, dz, nx, ny, nz, std::span<float>{got});
 
         // CPU baseline: the Embree+TBB float path (falls back when unavailable).
-        // The full GWN is invariant to x0, so a non-axis-aligned direction keeps the Embree ray off the cube's shared face diagonals (where Möller-Trumbore would double-count).
-        // That is a CPU-side artifact, independent of the GPU's own (axis-aligned) integration.
+        // The full GWN is invariant to x0, so a non-axis-aligned direction keeps the Embree ray off the cube's shared
+        // face diagonals (where Möller-Trumbore would double-count). That is a CPU-side artifact, independent of the
+        // GPU's own (axis-aligned) integration.
         auto const x0 = normalize(fvec3{0.31f, 0.57f, 0.76f});
         std::span<weighted_fsegment3 const> const bspan{boundary};
         std::vector<float> ref(cells);
@@ -186,7 +188,8 @@ TEST_CASE("OpenGLMeshGwn: dense grid roughly matches the Embree+TBB float CPU pa
         eval_gwnr_mesh_batch(disp, intersector, std::span<fvec3 const>{positions}, std::span<float>{ref}, x0, bspan);
 
         float const tol = 3e-3f;
-        // Skip cells within ~2 grid steps of the surface: there the rasterized crossing (snapped to a cell) legitimately differs from the exact ray.
+        // Skip cells within ~2 grid steps of the surface: there the rasterized crossing (snapped to a cell)
+        // legitimately differs from the exact ray.
         float const skin = 2.0f * e;
         int checked = 0;
         int mismatches = 0;

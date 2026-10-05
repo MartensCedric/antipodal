@@ -108,9 +108,9 @@ def build(preset: str, vcpkg_toolchain: Path | None) -> Path:
             sys.exit(f"vcpkg toolchain file not found: {vcpkg_toolchain}")
         configure.append(f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_toolchain}")
 
-    # MSVC presets need the VS dev environment for `cl` to resolve.
+    # Windows presets need the VS dev environment: `cl` to resolve for MSVC, the CRT/SDK for clang-cl.
     env: dict[str, str] | None = None
-    if sys.platform == "win32" and "msvc" in preset and "VCINSTALLDIR" not in os.environ:
+    if sys.platform == "win32" and "windows" in preset and "VCINSTALLDIR" not in os.environ:
         env = msvc_env("x64")
 
     subprocess.run(configure, cwd=ROOT, check=True, env=env)

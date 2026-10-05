@@ -1,0 +1,159 @@
+name: CI
+
+# Wide-but-shallow build + test matrix (one config per platform/compiler), plus the
+# two Linux clang jobs that go deeper: Debug with ASan/UBSan, and Release with Mesa's
+# software rasterizer (llvmpipe) so the OpenGL compute path actually runs instead of
+# skipping on a GPU-less runner. A separate cheap job checks formatting and that the
+# ANTIPODAL_HAS_* gating compiles with every optional dependency off.
+#
+# Everything builds through build.py with an explicit preset. Dependencies (tbb,
+# embree, stb) are prebuilt, never vcpkg: building embree from source took up to
+# 17 min per job. Linux uses apt, macOS brew, Windows the official release zips.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Release-zip versions for Windows; Linux and macOS take what apt / brew ship.
+  EMBREE_VERSION: 4.4.1
+  TBB_VERSION: 2022.3.0
+  # stb_image_write.h for macOS and Windows (apt has libstb-dev).
+  STB_COMMIT: 2c980bb59875b0d32144a71867fbdebb2f77cd20
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux Clang Debug ASan+UBSan
+            os: ubuntu-26.04
+            preset: x64-linux-clang-ninja-asan
+          - name: Linux Clang Release + llvmpipe
+            os: ubuntu-26.04
+            preset: x64-linux-clang-ninja-release
+            mesa: true
+          - name: Linux GCC
+            os: ubuntu-26.04
+            preset: x64-linux-gcc-ninja-relwithdebinfo
+          - name: Linux ARM Clang
+            os: ubuntu-26.04-arm
+            preset: arm64-linux-clang-ninja-relwithdebinfo
+          - name: Windows MSVC
+            os: windows-2025
+            preset: x64-windows-msvc-ninja-relwithdebinfo
+          - name: Windows clang-cl
+            os: windows-2025
+            preset: x64-windows-clang-ninja-relwithdebinfo
+          - name: macOS AppleClang
+            os: macos-latest
+            preset: arm64-macos-clang-ninja-relwithdebinfo
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Mesa picks X11/Wayland otherwise and fails on a headless runner.
+      EGL_PLATFORM: surfaceless
+      UBSAN_OPTIONS: print_stacktrace=1
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # GL + EGL headers/libs are needed to link the OpenGL test. Without a Mesa
+      # driver, EGL finds no display and the test skips; with it, llvmpipe runs it.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libtbb-dev libembree-dev libstb-dev libgl-dev libegl-dev \
+            ${{ matrix.mesa && 'libegl-mesa0 libgl1-mesa-dri' || '' }}
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja embree
+          mkdir -p ci-deps/stb/include
+          curl -fsSL -o ci-deps/stb/include/stb_image_write.h "https://raw.githubusercontent.com/nothings/stb/$STB_COMMIT/stb_image_write.h"
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix):$PWD/ci-deps/stb" >> "$GITHUB_ENV"
+
+      # Embree's zip bundles the TBB DLLs but not TBB's headers or CMake config, hence oneTBB's zip too.
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $deps = "$env:GITHUB_WORKSPACE\ci-deps"
+          New-Item -ItemType Directory -Force "$deps\stb\include" | Out-Null
+          curl.exe -fsSL -o "$deps\embree.zip" "https://github.com/RenderKit/embree/releases/download/v$env:EMBREE_VERSION/embree-$env:EMBREE_VERSION.x64.windows.zip"
+          curl.exe -fsSL -o "$deps\tbb.zip" "https://github.com/uxlfoundation/oneTBB/releases/download/v$env:TBB_VERSION/oneapi-tbb-$env:TBB_VERSION-win.zip"
+          curl.exe -fsSL -o "$deps\stb\include\stb_image_write.h" "https://raw.githubusercontent.com/nothings/stb/$env:STB_COMMIT/stb_image_write.h"
+          # System32's bsdtar reads zips (Git's GNU tar may shadow a bare `tar`).
+          $tar = "$env:SystemRoot\System32\tar.exe"
+          & $tar -xf "$deps\embree.zip" -C $deps
+          & $tar -xf "$deps\tbb.zip" -C $deps
+          $embree = "$deps\embree-$env:EMBREE_VERSION.x64.windows"
+          $tbb = "$deps\oneapi-tbb-$env:TBB_VERSION"
+          Add-Content $env:GITHUB_ENV "CMAKE_PREFIX_PATH=$tbb;$embree;$deps\stb"
+          Add-Content $env:GITHUB_PATH "$tbb\redist\intel64\vc14"
+          Add-Content $env:GITHUB_PATH "$embree\bin"
+
+      # The image does not reliably put LLVM's bin on PATH, and the preset names a bare clang-cl.
+      - name: Put LLVM on PATH
+        if: contains(matrix.preset, 'windows-clang')
+        shell: pwsh
+        run: |
+          $llvm = "$env:ProgramFiles\LLVM\bin"
+          if (-not (Test-Path "$llvm\clang-cl.exe")) { throw "no clang-cl.exe under $llvm - the image moved LLVM" }
+          Add-Content $env:GITHUB_PATH $llvm
+
+      - name: Build
+        run: python build.py --preset ${{ matrix.preset }} --no-vcpkg
+
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.preset }} --output-on-failure
+
+      # The OpenGL test skips (and passes) without a usable context; on the llvmpipe job that would hide a broken Mesa setup.
+      - name: Check the OpenGL test ran
+        if: matrix.mesa
+        run: |
+          ./build/${{ matrix.preset }}/antipodal-tests --test-case='OpenGL*' | tee gl-test.log
+          if grep -q "skipping GPU test" gl-test.log; then echo "::error::OpenGL test skipped on llvmpipe"; exit 1; fi
+
+  format-and-nodeps:
+    name: Format + no optional deps
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0 (no floating major tags)
+        with:
+          # Nothing to key a cache on: the scripts declare their deps inline, there are no requirements files.
+          enable-cache: false
+
+      - name: clang-format check
+        run: uv run script/run-clang-format.py --check
+
+      # TBB, Embree, OpenGL and the examples off: nothing installed, just the compiler.
+      - name: Build
+        run: uv run build.py --preset x64-linux-clang-ninja-nodeps --no-vcpkg
+
+      - name: Test
+        run: ctest --test-dir build/x64-linux-clang-ninja-nodeps --output-on-failure

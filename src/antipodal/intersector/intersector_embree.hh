@@ -20,15 +20,39 @@
 
 #if defined(ANTIPODAL_HAS_EMBREE) && ANTIPODAL_HAS_EMBREE
 #include <embree4/rtcore.h>
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <pmmintrin.h>
 #include <xmmintrin.h>
+#define ANTIPODAL_EMBREE_FTZ_SSE 1
+#elif defined(__aarch64__) && (defined(__GNUC__) || defined(__clang__))
+#define ANTIPODAL_EMBREE_FTZ_FPCR 1
+#endif
 
 #include <cassert>
+#include <cstdint>
 #include <limits>
 #include <span>
 
 namespace antipodal
 {
+namespace detail
+{
+// Embree recommends FTZ/DAZ on every traversal thread.
+// x86: the SSE control flags. arm64: FPCR.FZ (bit 24), which flushes inputs and outputs alike. Elsewhere: a no-op.
+inline void embree_set_ftz_daz()
+{
+#if defined(ANTIPODAL_EMBREE_FTZ_SSE)
+    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+#elif defined(ANTIPODAL_EMBREE_FTZ_FPCR)
+    std::uint64_t fpcr = 0;
+    __asm__ volatile("mrs %0, fpcr" : "=r"(fpcr));
+    __asm__ volatile("msr fpcr, %0" : : "r"(fpcr | (std::uint64_t(1) << 24)));
+#endif
+}
+} // namespace detail
+
 struct EmbreeIntersector
 {
     EmbreeIntersector(std::span<fvec3 const> vertices, std::span<int const> indices)
@@ -65,9 +89,7 @@ struct EmbreeIntersector
 
     [[nodiscard]] int signed_intersection_count(fvec3 p, fvec3 dir) const
     {
-        // Embree recommends FTZ/DAZ on every traversal thread.
-        _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-        _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+        detail::embree_set_ftz_daz();
 
         struct query_context
         {
